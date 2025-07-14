@@ -1,0 +1,115 @@
+# AI Trading Empire - US Live Trading Configuration
+
+# Portfolio Settings (Conservative for US regulations)
+portfolio:
+  initial_capital: 10000.0    # Starting capital in USD
+  max_position_size: 0.05     # Maximum 5% per position (conservative)
+  max_portfolio_risk: 0.01    # Maximum 1% daily VaR (conservative)
+  target_sharpe_ratio: 1.2    # Target Sharpe ratio
+  
+# Risk Management (US Compliance Focus)
+risk_management:
+  use_kelly_criterion: true
+  kelly_fraction: 0.125       # Use 12.5% of optimal Kelly (very conservative)
+  max_drawdown: 0.10          # Stop at 10% drawdown
+  confidence_threshold: 0.4   # Higher confidence threshold
+  stop_loss_percentage: 0.03  # 3% stop loss
+  take_profit_percentage: 0.06 # 6% take profit (2:1 ratio)
+  
+# US Market Hours (Eastern Time)
+market_hours:
+  crypto_24_7: true           # Crypto markets are 24/7
+  preferred_trading_hours:
+    start: "09:30"            # 9:30 AM ET (market open)
+    end: "16:00"              # 4:00 PM ET (market close)
+  avoid_trading_hours:
+    - "00:00-06:00"           # Low liquidity hours
+    - "22:00-23:59"           # Pre-market volatility
+    
+# Data Sources Configuration
+data_sources:
+  price_update_interval: 5    # Seconds between price updates (conservative)
+  sentiment_update_interval: 60 # Seconds between sentiment updates
+  correlation_window: 300     # 5 minutes for correlation analysis
+  
+# Machine Learning (Conservative Settings)
+ml:
+  retrain_interval: 7200      # Retrain models every 2 hours
+  prediction_horizon: 30      # Predict 30 minutes ahead
+  feature_window: 120         # Use 2 hours of features
+  confidence_threshold: 0.6   # Higher confidence threshold
+  min_training_samples: 1000  # Minimum samples before trading
+  
+# Exchange Configuration
+exchanges:
+  primary: "coinbase_pro"
+  backup: ["kraken", "gemini"]
+  max_exchanges: 2            # Limit to 2 exchanges simultaneously
+  
+# US-Compliant Cryptocurrency Pairs
+trading_pairs:
+  tier_1:  # Major cryptocurrencies (higher allocation)
+    - "BTC/USD"
+    - "ETH/USD"
+  tier_2:  # Alternative cryptocurrencies (lower allocation)
+    - "ADA/USD"
+    - "SOL/USD"
+    - "MATIC/USD"
+    - "AVAX/USD"
+    - "DOT/USD"
+    - "LINK/USD"
+    
+# Position Sizing by Tier
+position_limits:
+  tier_1_max: 0.04            # 4% max per tier 1 asset
+  tier_2_max: 0.02            # 2% max per tier 2 asset
+  total_crypto_max: 0.15      # 15% total crypto exposure
+  
+# Order Management
+order_management:
+  order_type: "limit"         # Default to limit orders
+  max_slippage: 0.003         # 0.3% maximum slippage
+  order_timeout: 300          # 5 minutes order timeout
+  retry_attempts: 3           # Number of retry attempts
+  
+# US Compliance Features
+compliance:
+  enable_wash_sale_prevention: true
+  minimum_holding_period: 30  # 30 seconds minimum hold
+  max_daily_trades: 20        # Limit daily trades
+  pattern_day_trader_check: true
+  
+# Tax Reporting (US Requirements)
+tax_reporting:
+  enable_tax_tracking: true
+  cost_basis_method: "fifo"   # First In, First Out
+  log_all_transactions: true
+  export_format: "csv"
+  
+# Safety Features
+safety:
+  enable_circuit_breakers: true
+  max_consecutive_losses: 5
+  emergency_shutdown_loss: 1000 # $1000 emergency stop
+  require_manual_approval: true # For large orders
+  
+# Demo Settings
+demo:
+  duration_minutes: 10        # How long to run demos
+  update_frequency: 5         # Seconds between updates
+  enable_live_data: true      # Use live data for demos
+  paper_trading_default: true # Default to paper trading
+
+# Notification Settings
+notifications:
+  email_on_trades: false
+  email_on_errors: true
+  discord_on_large_moves: false
+  log_level: "INFO"
+  
+# Performance Monitoring
+monitoring:
+  track_slippage: true
+  track_latency: true
+  benchmark_symbol: "BTC"
+  performance_window: 30      # Days for performance calculation
