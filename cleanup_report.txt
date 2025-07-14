@@ -1,0 +1,55 @@
+AI Trading Empire - Cleanup Report
+Generated: Mon Jul 14 00:57:08 EDT 2025
+
+BEFORE CLEANUP:
+- Repository size: 1.8G
+- Total files:    79025
+
+AFTER CLEANUP:
+- Repository size: 1.3G
+- Total files:    47761
+
+ACTIONS TAKEN:
+- Removed Python cache files and bytecode
+- Removed 0 duplicate demo files
+- Removed 3 unnecessary config files
+- Removed 3 large/temporary files
+- Removed 6 redundant scripts
+- Removed 11 empty directories
+- Updated .gitignore with optimized rules
+- Created streamlined requirements.txt
+- Optimized Python file formatting
+
+REMAINING STRUCTURE:
+.
+./config
+./core
+./core/fusion
+./core/fusion/correlators
+./data_streams
+./data_streams/price_feed
+./data_streams/social_sentiment
+./risk_management
+./risk_management/portfolio_risk
+./risk_management/position_sizing
+./tests
+./trading_env
+./trading_env/bin
+./trading_env/etc
+./trading_env/etc/jupyter
+./trading_env/etc/jupyter/nbconfig
+./trading_env/etc/jupyter/nbconfig/notebook.d
+./trading_env/include
+./trading_env/lib
+
+LARGEST REMAINING FILES:
+161M	./trading_env/lib/python3.11/site-packages/torch/lib/libtorch_cpu.dylib
+63M	./trading_env/lib/python3.11/site-packages/catboost/_catboost.so
+21M	./trading_env/lib/python3.11/site-packages/torch/lib/libtorch_python.dylib
+20M	./trading_env/lib/python3.11/site-packages/cryptography/hazmat/bindings/_rust.abi3.so
+20M	./venv/lib/python3.11/site-packages/cryptography/hazmat/bindings/_rust.abi3.so
+11M	./trading_env/lib/python3.11/site-packages/tokenizers/tokenizers.cpython-311-darwin.so
+8.7M	./trading_env/lib/python3.11/site-packages/lxml/etree.cpython-311-darwin.so
+8.5M	./trading_env/lib/python3.11/site-packages/catboost/hnsw/_hnsw.so
+6.5M	./venv/lib/python3.11/site-packages/xgboost/lib/libxgboost.dylib
+6.2M	./trading_env/lib/python3.11/site-packages/jieba/analyse/idf.txt

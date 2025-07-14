@@ -1,27 +1,34 @@
-# Core Dependencies
+# AI Trading Empire - Production Requirements
+# Core dependencies only - install additional packages as needed
+
+# Core Data Processing
 numpy>=1.24.0
 pandas>=2.0.0
+scipy>=1.10.0
+
+# Async HTTP and WebSockets
 aiohttp>=3.9.0
+websockets>=12.0
+
+# Configuration and Logging
 python-dotenv>=1.0.0
 loguru>=0.7.0
+pyyaml>=6.0
 
-# API clients
+# API Clients
 requests>=2.31.0
-yfinance>=0.2.18
 ccxt>=4.1.0
+
+# Basic ML (install others as needed)
+scikit-learn>=1.3.0
 
 # Sentiment Analysis
 textblob>=0.17.1
 vaderSentiment>=3.3.2
 
-# Scientific Computing
-scipy>=1.10.0
-scikit-learn>=1.3.0
-
-# Optional ML (for alpha detection)
-xgboost>=2.0.0
-lightgbm>=4.0.0
-
-# Data feeds
-feedparser>=6.0.10
-websockets>=12.0
+# Optional: Install these separately if needed
+# yfinance>=0.2.18
+# xgboost>=2.0.0
+# lightgbm>=4.0.0
+# torch>=2.0.0
+# transformers>=4.21.0

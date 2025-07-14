@@ -1,0 +1,35 @@
+# AI Trading Empire - Production Configuration
+# Optimized for live trading environments
+
+portfolio:
+  initial_capital: 100000.0
+  max_position_size: 0.05
+  max_portfolio_risk: 0.015
+  target_sharpe_ratio: 1.5
+
+risk_management:
+  use_kelly_criterion: true
+  kelly_fraction: 0.20
+  max_drawdown: 0.12
+  confidence_threshold: 0.4
+
+data_sources:
+  price_update_interval: 5
+  sentiment_update_interval: 60
+  correlation_window: 300
+
+ml:
+  retrain_interval: 7200
+  prediction_horizon: 30
+  feature_window: 120
+  confidence_threshold: 0.6
+
+symbols:
+  primary: ["BTCUSDT", "ETHUSDT"]
+  secondary: ["ADAUSDT", "SOLUSDT"]
+
+production:
+  enable_logging: true
+  log_level: "INFO"
+  enable_alerts: true
+  enable_monitoring: true
