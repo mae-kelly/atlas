@@ -1,0 +1,54 @@
+miniconda.sh
+
+# AI Trading Empire - Prevent large files
+*.dylib
+*.so
+*.dll
+*.tar.gz
+*.zip
+*.7z
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+trading_env/
+env/
+ENV/
+
+# Large data files
+*.h5
+*.hdf5
+*.parquet
+*.pickle
+*.pkl
+
+# Model files
+*.pt
+*.pth
+*.model
+*.ckpt
+
+# Logs
+*.log
+*.out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
