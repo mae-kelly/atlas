@@ -1,6 +1,5 @@
 import torch,torch.nn as nn,torch.nn.functional as F,numpy as np,math
 from typing import Optional
-
 class LinearAttention(nn.Module):
     def __init__(self,dim,heads=8):
         super().__init__();self.heads,self.dim,self.head_dim=heads,dim,dim//heads
@@ -10,7 +9,6 @@ class LinearAttention(nn.Module):
         q,k,v=map(lambda t:t.view(b,n,self.heads,self.head_dim).transpose(1,2),[q,k,v])
         q,k=F.elu(q)+1,F.elu(k)+1;kv=torch.einsum('bhnd,bhnf->bhdf',k,v);out=torch.einsum('bhnd,bhdf->bhnf',q,kv)
         return self.proj(out.transpose(1,2).reshape(b,n,d))
-
 class TemporalFusionTransformer(nn.Module):
     def __init__(self,input_dim,hidden_dim=256,heads=8,layers=6):
         super().__init__();self.emb=nn.Linear(input_dim,hidden_dim)
@@ -19,7 +17,6 @@ class TemporalFusionTransformer(nn.Module):
         self.out=nn.Linear(hidden_dim//2,1)
     def forward(self,x):
         x=self.emb(x);[x:=layer(x)for layer in self.layers];x=self.gating(x);return self.out(x.mean(1))
-
 class AutoformerLayer(nn.Module):
     def __init__(self,dim,seq_len,factor=1):
         super().__init__();self.factor,self.seq_len=factor,seq_len
@@ -30,7 +27,6 @@ class AutoformerLayer(nn.Module):
         trend=self.decomp(x.transpose(1,2)).transpose(1,2);seasonal=x-trend
         seasonal=seasonal+self.attn(self.norm1(seasonal));seasonal=seasonal+self.ff(self.norm2(seasonal))
         return seasonal+trend
-
 class FEDformer(nn.Module):
     def __init__(self,seq_len,dim,modes=32):
         super().__init__();self.modes,self.seq_len=modes,seq_len
@@ -39,7 +35,6 @@ class FEDformer(nn.Module):
     def forward(self,x):
         b,n,d=x.shape;x_ft=torch.fft.rfft(x,dim=1);x_ft[:,:self.modes,:]*=self.fourier_layer
         x=torch.fft.irfft(x_ft,n=n,dim=1);return self.norm(x+self.conv(x.transpose(1,2)).transpose(1,2))
-
 class Informer(nn.Module):
     def __init__(self,dim,heads,factor=5):
         super().__init__();self.factor,self.heads=factor,heads

@@ -1,6 +1,5 @@
 import torch,torch.nn as nn,numpy as np,re
 from transformers import AutoTokenizer,AutoModel
-
 class EmotionSentimentAnalyzer:
     def __init__(self):
         self.emotion_lexicon={'joy':0.8,'fear':-0.7,'anger':-0.8,'sadness':-0.6,'surprise':0.3,'disgust':-0.7}
@@ -16,7 +15,6 @@ class EmotionSentimentAnalyzer:
     def _get_emotion_words(self,emotion):
         word_map={'joy':['happy','excited','great','amazing','awesome'],'fear':['scared','worried','afraid','panic'],'anger':['angry','mad','furious','hate'],'sadness':['sad','depressed','down','disappointed'],'surprise':['wow','shocked','unbelievable'],'disgust':['disgusting','terrible','awful','horrible']}
         return word_map.get(emotion,[])
-
 class MultilingualCryptoSentiment:
     def __init__(self):
         self.language_models={'en':'bert-base-uncased','zh':'bert-base-chinese','ja':'bert-base-japanese','ko':'bert-base-multilingual-cased'}
@@ -33,7 +31,6 @@ class MultilingualCryptoSentiment:
     def _calculate_crypto_sentiment_boost(self,text,lang):
         terms=self.crypto_terms_by_lang.get(lang,[]);boost=sum(0.1 for term in terms if term in text.lower())
         return min(boost,0.5)
-
 class InfluencerWeightingSentiment:
     def __init__(self):
         self.influencer_db={'elonmusk':{'followers':100000000,'crypto_relevance':0.9},'vitalikbuterin':{'followers':5000000,'crypto_relevance':1.0},'michael_saylor':{'followers':2000000,'crypto_relevance':0.95}}

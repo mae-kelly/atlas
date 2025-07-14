@@ -1,136 +1,317 @@
 #!/bin/bash
 
-# AI Trading Empire Cleanup Script
-# This script removes unnecessary files and directories from the project structure
+# AI Trading Empire - Configuration Setup Script
+# Creates necessary configuration files and directories
 
-set -e  # Exit on any error
+set -e
 
-echo "🧹 Starting AI Trading Empire cleanup..."
+echo "⚙️  AI Trading Empire - Configuration Setup"
+echo "==========================================="
 
-# Function to safely remove files/directories
-safe_remove() {
-    if [ -e "$1" ]; then
-        echo "Removing: $1"
-        rm -rf "$1"
-    else
-        echo "Not found (skipping): $1"
-    fi
-}
+# Create config directory if it doesn't exist
+mkdir -p config
 
-# Remove version tag artifacts (these look like git artifacts)
-echo "📦 Removing version artifacts..."
-find . -name "=*.*.*" -type f -delete 2>/dev/null || true
-find . -name "=*.*" -type f -delete 2>/dev/null || true
-find . -name "=*" -type f -delete 2>/dev/null || true
+echo "📝 Creating API credentials template..."
 
-# Remove backup directories
-echo "🗂️ Removing backup directories..."
-safe_remove "backups/mock_replacement_20250712_190646"
-safe_remove "backups/mock_replacement_20250712_190928"
-safe_remove "backups/size_optimization_20250712_191933"
-safe_remove "backups"
+# Create the API credentials template
+cat > config/api_credentials.env << 'EOF'
+# AI Trading Empire - API Configuration
+# Copy this file to .env and fill in your API keys
 
-# Remove duplicate package structure
-echo "📁 Removing duplicate package structure..."
-safe_remove "packages/ai_trading_empire_lite"
-safe_remove "packages"
+# ===========================================
+# CRYPTOCURRENCY EXCHANGES
+# ===========================================
 
-# Remove compressed package files
-echo "📦 Removing compressed packages..."
-safe_remove "ai_trading_empire_lite.tar.gz"
-safe_remove "ai_trading_empire_lite.zip"
+# Binance (Free - for price data)
+BINANCE_API_KEY=your_binance_api_key_here
+BINANCE_SECRET_KEY=your_binance_secret_here
 
-# Remove duplicate demo files (keep only the main ones)
-echo "🎯 Cleaning up demo files..."
-safe_remove "demo_data_fusion_final_fix.py"
-safe_remove "demo_data_fusion_fixed.py"
-# Keep: demo_data_fusion.py (the main one)
+# Coinbase Pro (Optional)
+COINBASE_API_KEY=your_coinbase_key_here
+COINBASE_SECRET=your_coinbase_secret_here
+COINBASE_PASSPHRASE=your_coinbase_passphrase_here
 
-# Remove empty docker structure
-echo "🐳 Removing empty docker directories..."
-safe_remove "docker/services"
-safe_remove "docker/volumes"
-if [ -d "docker" ] && [ -z "$(ls -A docker)" ]; then
-    safe_remove "docker"
+# ===========================================
+# MARKET DATA PROVIDERS
+# ===========================================
+
+# CoinGecko (Free tier available)
+COINGECKO_API_KEY=your_coingecko_key_here
+
+# Alpha Vantage (Free tier: 5 calls/min)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key_here
+
+# Twelve Data (Free tier available)
+TWELVE_DATA_API_KEY=your_twelve_data_key_here
+
+# ===========================================
+# NEWS & SENTIMENT SOURCES
+# ===========================================
+
+# News API (Free tier: 1000 requests/month)
+NEWS_API_KEY=your_news_api_key_here
+
+# Twitter API v2 (Essential tier available)
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
+TWITTER_CONSUMER_KEY=your_twitter_consumer_key_here
+TWITTER_CONSUMER_SECRET=your_twitter_consumer_secret_here
+TWITTER_ACCESS_TOKEN=your_twitter_access_token_here
+TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret_here
+
+# Reddit API (Free)
+REDDIT_CLIENT_ID=your_reddit_client_id_here
+REDDIT_CLIENT_SECRET=your_reddit_client_secret_here
+REDDIT_USER_AGENT=AITradingEmpire/1.0
+
+# ===========================================
+# OPTIONAL ADVANCED APIS
+# ===========================================
+
+# Polygon.io (Free tier available)
+POLYGON_API_KEY=your_polygon_key_here
+
+# Finnhub (Free tier available)
+FINNHUB_API_KEY=your_finnhub_key_here
+
+# IEX Cloud (Free tier available)
+IEX_CLOUD_API_KEY=your_iex_key_here
+
+# FRED Economic Data (Free)
+FRED_API_KEY=your_fred_key_here
+
+# ===========================================
+# DATABASE & STORAGE (Optional)
+# ===========================================
+
+# Database URL (SQLite by default)
+DATABASE_URL=sqlite:///data/trading.db
+
+# Redis (Optional - for caching)
+REDIS_URL=redis://localhost:6379/0
+
+# ===========================================
+# APPLICATION SETTINGS
+# ===========================================
+
+# Environment (development/production)
+ENVIRONMENT=development
+
+# Debug mode
+DEBUG=true
+
+# Log level (DEBUG/INFO/WARNING/ERROR)
+LOG_LEVEL=INFO
+
+# ===========================================
+# NOTES:
+# ===========================================
+# 
+# REQUIRED FOR BASIC FUNCTIONALITY:
+# - None! The system works with free APIs and demo data
+#
+# RECOMMENDED FOR FULL FEATURES:
+# - BINANCE_API_KEY (free account for real price data)
+# - NEWS_API_KEY (free tier for sentiment analysis)
+#
+# OPTIONAL ENHANCEMENTS:
+# - TWITTER_BEARER_TOKEN (for social sentiment)
+# - ALPHA_VANTAGE_API_KEY (for additional market data)
+#
+# GET FREE API KEYS:
+# - Binance: https://www.binance.com/en/my/settings/api-management
+# - News API: https://newsapi.org/register
+# - Twitter: https://developer.twitter.com/
+# - Alpha Vantage: https://www.alphavantage.co/support/#api-key
+# - CoinGecko: https://www.coingecko.com/en/api/pricing
+#
+EOF
+
+echo "✅ API credentials template created at: config/api_credentials.env"
+
+# Check if .env already exists
+if [ -f ".env" ]; then
+    echo "⚠️  .env file already exists"
+    echo "   Backing up existing .env to .env.backup"
+    cp .env .env.backup
 fi
 
-# Remove fallbacks directory (should be integrated into main modules)
-echo "🔄 Removing fallbacks directory..."
-safe_remove "fallbacks"
+# Copy template to .env
+echo "📋 Copying template to .env..."
+cp config/api_credentials.env .env
 
-# Remove experimental/questionable ML components
-echo "🧠 Removing experimental ML components..."
-safe_remove "ml/models/gnn_advanced/quantum_nets.py"
-safe_remove "infrastructure/fpga"
+echo "✅ Configuration file created: .env"
 
-# Remove duplicate .env files (keep main one)
-echo "⚙️ Cleaning up environment files..."
-safe_remove "config/api_credentials.env"
-safe_remove "packages/ai_trading_empire_lite/config/api_credentials.env"
-# Keep: .env in root
+# Create additional config files
+echo "📄 Creating additional configuration files..."
 
-# Remove backup requirement files
-echo "📋 Removing backup requirements..."
-safe_remove "size_optimization_20250712_191933/requirements.txt.backup"
+# Create trading config
+cat > config/trading_config.yaml << 'EOF'
+# AI Trading Empire - Trading Configuration
 
-# Remove empty __init__.py files in directories with no other Python files
-echo "🐍 Cleaning up empty __init__.py files..."
-find . -name "__init__.py" -type f | while read -r init_file; do
-    dir_path=$(dirname "$init_file")
-    # Count Python files (excluding __init__.py) in the directory
-    py_count=$(find "$dir_path" -maxdepth 1 -name "*.py" ! -name "__init__.py" | wc -l)
-    # Count subdirectories
-    subdir_count=$(find "$dir_path" -maxdepth 1 -type d ! -path "$dir_path" | wc -l)
+# Portfolio Settings
+portfolio:
+  initial_capital: 100000.0  # Starting capital in USD
+  max_position_size: 0.10    # Maximum 10% per position
+  max_portfolio_risk: 0.02   # Maximum 2% daily VaR
+  target_sharpe_ratio: 1.5   # Target Sharpe ratio
+
+# Risk Management
+risk_management:
+  use_kelly_criterion: true
+  kelly_fraction: 0.25       # Use 25% of optimal Kelly
+  max_drawdown: 0.15         # Stop at 15% drawdown
+  confidence_threshold: 0.3  # Minimum prediction confidence
+
+# Data Sources
+data_sources:
+  price_update_interval: 3   # Seconds between price updates
+  sentiment_update_interval: 30  # Seconds between sentiment updates
+  correlation_window: 120    # Seconds for correlation analysis
+
+# Machine Learning
+ml:
+  retrain_interval: 3600     # Retrain models every hour
+  prediction_horizon: 15     # Predict 15 minutes ahead
+  feature_window: 60         # Use 60 minutes of features
+  confidence_threshold: 0.5  # Minimum prediction confidence
+
+# Exchanges
+exchanges:
+  primary: "binance"
+  backup: ["coinbase", "kraken"]
+  
+# Symbols to Trade
+symbols:
+  crypto:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "ADAUSDT"
+    - "SOLUSDT"
+  
+# Demo Settings
+demo:
+  duration_minutes: 5        # How long to run demos
+  update_frequency: 3        # Seconds between updates
+  enable_live_data: false    # Use live data or simulation
+EOF
+
+echo "✅ Trading configuration created: config/trading_config.yaml"
+
+# Create data directories
+echo "📁 Creating data directories..."
+mkdir -p data/{models,historical,performance,logs}
+
+# Create a simple .env checker script
+cat > check_config.py << 'EOF'
+#!/usr/bin/env python3
+"""
+Quick configuration checker for AI Trading Empire
+"""
+
+import os
+from dotenv import load_dotenv
+
+def check_config():
+    print("🔍 Checking AI Trading Empire Configuration")
+    print("=" * 50)
     
-    # If no Python files and no subdirectories, remove the __init__.py
-    if [ "$py_count" -eq 0 ] && [ "$subdir_count" -eq 0 ]; then
-        echo "Removing empty __init__.py: $init_file"
-        rm -f "$init_file"
-    fi
-done
+    # Load .env file
+    if not os.path.exists('.env'):
+        print("❌ .env file not found!")
+        print("   Run: cp config/api_credentials.env .env")
+        return False
+    
+    load_dotenv()
+    
+    # Check essential configurations
+    essential_vars = {
+        'ENVIRONMENT': 'Application environment',
+        'DEBUG': 'Debug mode',
+        'LOG_LEVEL': 'Logging level'
+    }
+    
+    optional_vars = {
+        'BINANCE_API_KEY': 'Binance API (recommended)',
+        'NEWS_API_KEY': 'News API (recommended)', 
+        'TWITTER_BEARER_TOKEN': 'Twitter API (optional)',
+        'ALPHA_VANTAGE_API_KEY': 'Alpha Vantage (optional)',
+        'COINGECKO_API_KEY': 'CoinGecko (optional)'
+    }
+    
+    print("📋 Essential Configuration:")
+    all_essential_ok = True
+    for var, desc in essential_vars.items():
+        value = os.getenv(var)
+        if value and value != f'your_{var.lower()}_here':
+            print(f"   ✅ {desc}: Configured")
+        else:
+            print(f"   ⚠️  {desc}: Using default")
+    
+    print("\n🔌 API Keys:")
+    configured_apis = 0
+    total_apis = len(optional_vars)
+    
+    for var, desc in optional_vars.items():
+        value = os.getenv(var)
+        if value and value != f'your_{var.lower()}_here' and 'your_' not in value:
+            print(f"   ✅ {desc}: Configured")
+            configured_apis += 1
+        else:
+            print(f"   ⚠️  {desc}: Not configured")
+    
+    print(f"\n📊 API Configuration: {configured_apis}/{total_apis} configured")
+    
+    if configured_apis == 0:
+        print("\n💡 System will work with demo data!")
+        print("   - No API keys required for basic functionality")
+        print("   - Add API keys for live data and enhanced features")
+    elif configured_apis < total_apis // 2:
+        print("\n🚀 Basic functionality available!")
+        print("   - Add more API keys for full features")
+    else:
+        print("\n🏆 Full functionality available!")
+    
+    print(f"\n📁 Data Directories:")
+    data_dirs = ['data/models', 'data/historical', 'data/performance', 'data/logs']
+    for dir_path in data_dirs:
+        if os.path.exists(dir_path):
+            print(f"   ✅ {dir_path}")
+        else:
+            print(f"   ❌ {dir_path}")
+            os.makedirs(dir_path, exist_ok=True)
+            print(f"   ✅ {dir_path} (created)")
+    
+    print("\n✨ Configuration check complete!")
+    print("\n🚀 Ready to run:")
+    print("   ./run_simple_live_demo.sh")
+    
+    return True
 
-# Remove empty directories
-echo "📂 Removing empty directories..."
-find . -type d -empty -delete 2>/dev/null || true
+if __name__ == "__main__":
+    check_config()
+EOF
 
-# Clean up redundant shell scripts (keep essential ones)
-echo "🔧 Cleaning up shell scripts..."
-safe_remove "compress_large_files.sh"
-safe_remove "decompress_files.sh"
-safe_remove "optimize_environment.sh"
-safe_remove "restore_full_environment.sh"
-# Keep: one.sh, two.sh, quick_install.sh, and run_*_demo.sh scripts
-
-# Remove redundant test files
-echo "🧪 Cleaning up test files..."
-safe_remove "test_compatibility.py"
-# Keep other test files as they seem to test different components
-
-# Remove setup artifacts
-echo "🔨 Removing setup artifacts..."
-safe_remove "setup.log"
-
-# Remove API status report (should be generated, not stored)
-echo "📊 Removing generated reports..."
-safe_remove "api_status_report.json"
+chmod +x check_config.py
 
 echo ""
-echo "✅ Cleanup complete!"
+echo "✨ Configuration Setup Complete!"
 echo ""
-echo "📈 Summary of what was removed:"
-echo "   • Version tag artifacts"
-echo "   • Backup directories"
-echo "   • Duplicate package structure"
-echo "   • Compressed package files"
-echo "   • Duplicate demo files"
-echo "   • Empty docker directories"
-echo "   • Fallbacks directory"
-echo "   • Experimental quantum ML components"
-echo "   • FPGA infrastructure"
-echo "   • Duplicate environment files"
-echo "   • Empty __init__.py files"
-echo "   • Empty directories"
-echo "   • Redundant shell scripts"
-echo "   • Setup artifacts"
+echo "📁 Created files:"
+echo "   ✅ config/api_credentials.env (template)"
+echo "   ✅ .env (your configuration file)"
+echo "   ✅ config/trading_config.yaml"
+echo "   ✅ check_config.py (configuration checker)"
+echo "   ✅ data/ directories"
 echo ""
-echo "🎉 Your AI trading empire is now leaner and cleaner!"
+echo "🚀 Next Steps:"
+echo "   1. Edit .env file with your API keys (optional)"
+echo "   2. Run: python3 check_config.py"
+echo "   3. Run: ./run_simple_live_demo.sh"
+echo ""
+echo "💡 Pro Tips:"
+echo "   - System works WITHOUT API keys (uses demo data)"
+echo "   - Add Binance API key for real price data"
+echo "   - Add News API key for sentiment analysis"
+echo "   - Get free API keys from the URLs in .env comments"
+echo ""
+echo "✅ You can now run the trading system!"

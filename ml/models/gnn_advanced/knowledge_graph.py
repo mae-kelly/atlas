@@ -1,6 +1,5 @@
 import torch,torch.nn as nn,networkx as nx,numpy as np
 from typing import Dict,List,Tuple
-
 class DynamicKnowledgeGraph:
     def __init__(self):
         self.G=nx.DiGraph();self.entity_emb=nn.Embedding(10000,256);self.relation_emb=nn.Embedding(100,256)
@@ -13,7 +12,6 @@ class DynamicKnowledgeGraph:
     def extract_entities(self,text):return [w for w in text.split()if w.isupper()]
     def extract_relations(self,text):return ['AFFECTS','CORRELATES']
     def query_graph(self,entity):return list(self.G.neighbors(entity))if entity in self.G else[]
-
 class SpatialTemporalAttention(nn.Module):
     def __init__(self,dim,num_nodes):
         super().__init__();self.spatial_attn=nn.MultiheadAttention(dim,8,batch_first=True)
@@ -21,7 +19,6 @@ class SpatialTemporalAttention(nn.Module):
     def forward(self,x,node_ids,timestamps):
         spatial_x,_=self.spatial_attn(x,x,x);temporal_x,_=self.temporal_attn(spatial_x,spatial_x,spatial_x)
         node_features=self.node_emb(node_ids);return temporal_x+node_features
-
 class CausalMemoryNetwork(nn.Module):
     def __init__(self,dim):
         super().__init__();self.memory=nn.Parameter(torch.randn(100,dim));self.causal_net=nn.Linear(dim*2,1)
@@ -31,7 +28,6 @@ class CausalMemoryNetwork(nn.Module):
         causal_score=self.causal_net(torch.cat([x,sentiment],dim=-1)).sigmoid()
         gate=self.update_gate(torch.cat([x,retrieved],dim=-1));updated_memory=gate*retrieved+(1-gate)*x
         return updated_memory*causal_score
-
 class HierarchicalGraphAttention(nn.Module):
     def __init__(self,company_dim,industry_dim):
         super().__init__();self.company_attn=nn.MultiheadAttention(company_dim,4,batch_first=True)

@@ -2,7 +2,6 @@ import torch,torch.nn as nn,numpy as np,pandas as pd,random,json,time
 from typing import Dict,List,Any
 from sklearn.metrics import accuracy_score,precision_recall_fscore_support
 from datetime import datetime
-
 class CompactBenchmark:
     def __init__(self,scale_factor=1):self.scale_factor,self.targets=scale_factor,{'asset_discovery_accuracy':0.95,'cross_source_consistency':0.85,'processing_speed':1000,'false_positive_rate':0.05}
     def generate_test_data(self,size=50000):
@@ -25,5 +24,4 @@ class CompactBenchmark:
         passed=[results[k]>=self.targets[k]if'rate'not in k else results[k]<=self.targets[k]for k in self.targets if k in results];success_rate=sum(passed)/len(passed)
         print(f"\n🎯 Success Rate: {success_rate:.1%} ({sum(passed)}/{len(passed)} targets)")
         return results
-
 if __name__=="__main__":CompactBenchmark().run_benchmark()

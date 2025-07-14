@@ -17,7 +17,6 @@ try:import networkx as nx
 except:nx=None
 try:from sklearn.metrics import mutual_info_score
 except:mutual_info_score=None
-
 @dataclass
 class AssetSignal:
     ip_address:Optional[str]=None;hostname:Optional[str]=None;mac_address:Optional[str]=None
@@ -25,18 +24,15 @@ class AssetSignal:
     def __post_init__(self):
         if self.features is None:self.features={}
         if self.timestamp is None:self.timestamp=datetime.now()
-
 class MultiHeadAttention(nn.Module):
     def __init__(self,d,h=8):
         super().__init__();self.d,self.h,self.dk=d,h,d//h;self.q,self.k,self.v,self.o=nn.Linear(d,d),nn.Linear(d,d),nn.Linear(d,d),nn.Linear(d,d)
     def forward(self,x):
         b,n,d=x.shape;q,k,v=self.q(x).view(b,n,self.h,self.dk).transpose(1,2),self.k(x).view(b,n,self.h,self.dk).transpose(1,2),self.v(x).view(b,n,self.h,self.dk).transpose(1,2)
         s=torch.matmul(q,k.transpose(-2,-1))/math.sqrt(self.dk);a=F.softmax(s,dim=-1);o=torch.matmul(a,v).transpose(1,2).contiguous().view(b,n,d);return self.o(o)
-
 class ResidualBlock(nn.Module):
     def __init__(self,d):super().__init__();self.l1,self.l2,self.n1,self.n2=nn.Linear(d,d*2),nn.Linear(d*2,d),nn.LayerNorm(d),nn.LayerNorm(d)
     def forward(self,x):r=x;x=self.n1(x);x=F.gelu(self.l1(x));x=F.dropout(x,0.1,self.training);x=self.l2(x);return self.n2(x+r)
-
 class EnhancedAssetModel(nn.Module):
     def __init__(self,input_dim=27,embed_dim=512,num_heads=16,num_layers=8,num_classes=6):
         super().__init__();self.embed=nn.Linear(input_dim,embed_dim);self.attn=nn.ModuleList([MultiHeadAttention(embed_dim,num_heads)for _ in range(num_layers//2)])
@@ -45,7 +41,6 @@ class EnhancedAssetModel(nn.Module):
     def forward(self,x):
         x=self.embed(x).unsqueeze(1);[x:=self.res[i](x.squeeze(1)).unsqueeze(1)if i>=len(self.attn)else self.attn[i](x)for i in range(len(self.res))];x=x.squeeze(1)
         return {'predictions':self.cls(x),'confidence':self.conf(x),'embeddings':x}
-
 class AssetCorrelationEngine:
     def __init__(self):self.ip_patterns,self.hostname_patterns={},{};self.correlation_graph=nx.Graph()if nx else None
     def build_correlations(self,datasets):
@@ -62,7 +57,6 @@ class AssetCorrelationEngine:
                 correlations['ip_overlap'][s1][s2]=i/u if u>0 else 0
         correlations['cross_source_overlap']={'avg_ip_overlap':np.mean([v for d in correlations['ip_overlap'].values()for k,v in d.items()if k!=list(d.keys())[0]])}
         return correlations
-
 class AtlasNeuralEngine:
     def __init__(self,config_path="config/atlas_config.yaml"):
         self.config=self._load_config(config_path);self.device=torch.device("cpu");self.model,self.correlation_engine=None,AssetCorrelationEngine()
@@ -100,7 +94,6 @@ class AtlasNeuralEngine:
             asset={'asset_id':f"atlas_{hash(str(sorted([s.ip_address for s in cluster_signals if s.ip_address])))%100000:05d}",'signals':cluster_signals,'confidence':confidence,'ip_addresses':list(set(s.ip_address for s in cluster_signals if s.ip_address)),'hostnames':list(set(s.hostname for s in cluster_signals if s.hostname)),'sources':list(set(s.source for s in cluster_signals))}
             inferred_assets.append(asset)
         return{'inferred_assets':inferred_assets,'shadow_assets':[a for a in inferred_assets if'cmdb'not in[s.source for s in a['signals']]],'visibility_score':min(1,sum(a['confidence']for a in inferred_assets)/len(inferred_assets))if inferred_assets else 0}
-
 def generate_enhanced_datasets(scale_factor=1):
     base_size=10000*scale_factor;shared_ips=[f"10.0.{i//254}.{i%254+1}"for i in range(2000)];shared_hostnames=[f"asset-{i:04d}.corp.local"for i in range(1000)];datasets={}
     def create_chronicle_data():
@@ -126,7 +119,6 @@ def generate_enhanced_datasets(scale_factor=1):
             data.append({'ci_id':f"CI{np.random.randint(100000,999999)}",'hostname':np.random.choice(shared_hostnames)if np.random.random()<0.9 else f"cmdb-{i}",'ip_address':np.random.choice(shared_ips),'asset_status':'active','asset_type':np.random.choice(['server','workstation','iot_device','mobile_device','network_device','cloud_service'])})
         return pd.DataFrame(data)
     datasets['chronicle'],datasets['splunk'],datasets['crowdstrike'],datasets['cmdb']=create_chronicle_data(),create_splunk_data(),create_crowdstrike_data(),create_cmdb_data();return datasets
-
 class EnhancedTrainingPipeline:
     def __init__(self,config):self.config,self.device=config,torch.device("cpu");self.model,self.optimizer,self.criterion=None,None,None;self.scaler,self.label_encoder=StandardScaler(),LabelEncoder()
     def prepare_data(self,datasets):
@@ -163,7 +155,6 @@ class EnhancedTrainingPipeline:
         with torch.no_grad():outputs=self.model(X_test);pred_classes=outputs['predictions'].argmax(1).cpu().numpy();true_classes=y_test.cpu().numpy();confidence_scores=outputs['confidence'].cpu().numpy()
         accuracy=accuracy_score(true_classes,pred_classes);precision,recall,f1,_=precision_recall_fscore_support(true_classes,pred_classes,average='weighted')
         return{'test_accuracy':accuracy,'precision':precision,'recall':recall,'f1_score':f1,'confidence_scores':confidence_scores,'predictions':pred_classes,'true_labels':true_classes}
-
 def main():
     print("🚀 Atlas Neural Asset Discovery Engine - Compressed Version");print("Target: 95%+ Asset Discovery, 85%+ Cross-Source Consistency")
     config={'learning_rate':3e-4,'epochs':50,'batch_size':32};datasets=generate_enhanced_datasets(scale_factor=1);pipeline=EnhancedTrainingPipeline(config)
@@ -182,5 +173,4 @@ def main():
     results={'timestamp':datetime.now().isoformat(),'test_accuracy':test_accuracy,'cross_source_consistency':consistency,'training_results':training_results,'config':config}
     with open('results/atlas_results.json','w')as f:json.dump(results,f,indent=2,default=str)
     return results
-
 if __name__=="__main__":main()

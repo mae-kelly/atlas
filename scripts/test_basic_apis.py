@@ -1,22 +1,15 @@
-#!/usr/bin/env python3
 """
 Basic API Test - Test core functionality without complex dependencies
 """
-
 import asyncio
 import aiohttp
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
-
 async def test_free_apis():
     """Test APIs that don't require authentication"""
-    
     print("🧪 Testing Free APIs...")
     print("=" * 40)
-    
-    # Test CoinGecko (free)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd') as response:
@@ -28,8 +21,6 @@ async def test_free_apis():
                     print(f"❌ CoinGecko: HTTP {response.status}")
     except Exception as e:
         print(f"❌ CoinGecko: {e}")
-    
-    # Test Binance public API (no auth required)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT') as response:
@@ -41,8 +32,6 @@ async def test_free_apis():
                     print(f"❌ Binance: HTTP {response.status}")
     except Exception as e:
         print(f"❌ Binance: {e}")
-    
-    # Test a news RSS feed
     try:
         import feedparser
         feed = feedparser.parse('https://feeds.reuters.com/reuters/businessNews')
@@ -52,17 +41,12 @@ async def test_free_apis():
             print("❌ Reuters RSS: No articles found")
     except Exception as e:
         print(f"❌ Reuters RSS: {e}")
-    
     print("=" * 40)
     print("🎯 Basic API test completed!")
-
 async def test_authenticated_apis():
     """Test APIs that require authentication"""
-    
     print("\n🔐 Testing Authenticated APIs...")
     print("=" * 40)
-    
-    # Test News API
     news_api_key = os.getenv('NEWS_API_KEY')
     if news_api_key:
         try:
@@ -84,8 +68,6 @@ async def test_authenticated_apis():
             print(f"❌ News API: {e}")
     else:
         print("⚠️ News API: Key not configured")
-    
-    # Test Twitter API
     twitter_token = os.getenv('TWITTER_BEARER_TOKEN')
     if twitter_token:
         try:
@@ -93,7 +75,6 @@ async def test_authenticated_apis():
                 headers = {'Authorization': f'Bearer {twitter_token}'}
                 url = 'https://api.twitter.com/2/tweets/search/recent'
                 params = {'query': 'bitcoin', 'max_results': 10}
-                
                 async with session.get(url, params=params, headers=headers) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -105,25 +86,17 @@ async def test_authenticated_apis():
             print(f"❌ Twitter API: {e}")
     else:
         print("⚠️ Twitter API: Bearer token not configured")
-    
     print("=" * 40)
-
 def check_environment():
     """Check environment setup"""
-    
     print("🌍 Environment Check...")
     print("=" * 40)
-    
-    # Check for .env file
     if os.path.exists('.env'):
         print("✅ .env file found")
     else:
         print("❌ .env file not found")
         print("   Please copy config/api_credentials.env to .env and configure your API keys")
-    
-    # Check critical packages
     required_packages = ['aiohttp', 'python-dotenv', 'feedparser']
-    
     for package in required_packages:
         try:
             __import__(package.replace('-', '_'))
@@ -131,24 +104,18 @@ def check_environment():
         except ImportError:
             print(f"❌ {package} not installed")
             print(f"   Run: pip install {package}")
-    
     print("=" * 40)
-
 async def main():
     """Main test function"""
-    
     print("🚀 AI Trading Empire - Basic API Test")
     print("=" * 50)
-    
     check_environment()
     await test_free_apis()
     await test_authenticated_apis()
-    
     print("\n✨ Test completed!")
     print("\nNext steps:")
     print("1. Configure API keys in .env file")
     print("2. Run: python scripts/check_api_status.py")
     print("3. Start the trading system")
-
 if __name__ == "__main__":
     asyncio.run(main())

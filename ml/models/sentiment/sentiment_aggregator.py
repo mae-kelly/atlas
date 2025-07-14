@@ -3,7 +3,6 @@ from typing import Dict,List
 from .crypto_bert import CryptoBERT,AspectLevelSentiment,MultilingualSentiment,InfluencerWeightedSentiment
 from loguru import logger
 import time
-
 class AdvancedSentimentAggregator:
     def __init__(self):
         self.crypto_bert=CryptoBERT()
@@ -12,7 +11,6 @@ class AdvancedSentimentAggregator:
         self.influencer_weighted=InfluencerWeightedSentiment()
         self.sentiment_history=[]
         self.correlation_cache={}
-    
     async def process_social_media_batch(self,social_data:List[Dict])->Dict:
         logger.info(f"📱 Processing {len(social_data)} social media posts")
         results={'crypto_bert':[],'aspect_level':[],'multilingual':[],'influencer_weighted':[],'aggregated_metrics':{}}
@@ -28,7 +26,6 @@ class AdvancedSentimentAggregator:
         results['influencer_weighted']=self.influencer_weighted.weight_by_influence(enhanced_data)
         results['aggregated_metrics']=self._calculate_aggregated_metrics(results)
         return results
-    
     def _calculate_aggregated_metrics(self,results:Dict)->Dict:
         crypto_sentiments=[r['final_sentiment']['sentiment_score']for r in results['crypto_bert']]
         weighted_sentiments=[r['weighted_sentiment']for r in results['influencer_weighted']]
@@ -39,7 +36,6 @@ class AdvancedSentimentAggregator:
                 sentiment_score=1 if data['sentiment']['label']=='POSITIVE'else-1 if data['sentiment']['label']=='NEGATIVE'else 0
                 aspect_sentiments[aspect].append(sentiment_score*data['sentiment']['score'])
         return{'overall_sentiment':np.mean(crypto_sentiments),'weighted_sentiment':np.mean(weighted_sentiments),'sentiment_volatility':np.std(crypto_sentiments),'bullish_ratio':sum(1 for s in crypto_sentiments if s>0.1)/len(crypto_sentiments),'bearish_ratio':sum(1 for s in crypto_sentiments if s<-0.1)/len(crypto_sentiments),'aspect_sentiments':{aspect:np.mean(scores)for aspect,scores in aspect_sentiments.items()if scores},'confidence_weighted_sentiment':np.average(crypto_sentiments,[r['confidence']for r in results['crypto_bert']]),'total_analyzed':len(crypto_sentiments)}
-    
     async def correlate_sentiment_with_price(self,sentiment_data:Dict,price_data:pd.DataFrame,symbol:str='BTC')->Dict:
         if symbol not in self.correlation_cache:self.correlation_cache[symbol]=[]
         timestamp=time.time()
@@ -53,7 +49,6 @@ class AdvancedSentimentAggregator:
             correlation=np.corrcoef(sentiment_series,recent_returns)[0,1]if len(sentiment_series)>1 else 0
             return{'correlation':correlation if not np.isnan(correlation)else 0,'sample_size':len(sentiment_series),'sentiment_mean':np.mean(sentiment_series),'price_volatility':np.std(recent_returns)}
         return{'correlation':0,'sample_size':len(sentiment_series)}
-    
     def generate_sentiment_signals(self,aggregated_data:Dict)->List[Dict]:
         signals=[]
         metrics=aggregated_data['aggregated_metrics']

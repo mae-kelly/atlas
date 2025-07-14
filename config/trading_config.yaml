@@ -1,0 +1,47 @@
+# AI Trading Empire - Trading Configuration
+
+# Portfolio Settings
+portfolio:
+  initial_capital: 100000.0  # Starting capital in USD
+  max_position_size: 0.10    # Maximum 10% per position
+  max_portfolio_risk: 0.02   # Maximum 2% daily VaR
+  target_sharpe_ratio: 1.5   # Target Sharpe ratio
+
+# Risk Management
+risk_management:
+  use_kelly_criterion: true
+  kelly_fraction: 0.25       # Use 25% of optimal Kelly
+  max_drawdown: 0.15         # Stop at 15% drawdown
+  confidence_threshold: 0.3  # Minimum prediction confidence
+
+# Data Sources
+data_sources:
+  price_update_interval: 3   # Seconds between price updates
+  sentiment_update_interval: 30  # Seconds between sentiment updates
+  correlation_window: 120    # Seconds for correlation analysis
+
+# Machine Learning
+ml:
+  retrain_interval: 3600     # Retrain models every hour
+  prediction_horizon: 15     # Predict 15 minutes ahead
+  feature_window: 60         # Use 60 minutes of features
+  confidence_threshold: 0.5  # Minimum prediction confidence
+
+# Exchanges
+exchanges:
+  primary: "binance"
+  backup: ["coinbase", "kraken"]
+  
+# Symbols to Trade
+symbols:
+  crypto:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "ADAUSDT"
+    - "SOLUSDT"
+  
+# Demo Settings
+demo:
+  duration_minutes: 5        # How long to run demos
+  update_frequency: 3        # Seconds between updates
+  enable_live_data: false    # Use live data or simulation

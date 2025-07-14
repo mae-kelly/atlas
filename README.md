@@ -1,38 +1,28 @@
-# Atlas Neural Asset Discovery Engine (Compressed)
+# AI Trading Empire - Compressed Version
 
-🚀 **PhD-Level Asset Discovery with 100% Functionality in Minimal Space**
-
-## Features
-- **95%+ Asset Discovery Accuracy** using 512D embeddings with 16-head attention
-- **85%+ Cross-Source Consistency** through advanced correlation techniques  
-- **100+ ML Practices** compressed into production-ready code
-- **Multi-Source Integration**: Chronicle, Splunk, CrowdStrike, CMDB
-- **Real-Time Processing**: 1000+ assets/second capability
+A high-performance cryptocurrency trading system with real-time data fusion.
 
 ## Quick Start
-```bash
-# Setup and run (one command)
-chmod +x atlas_compressed_setup.sh && ./atlas_compressed_setup.sh
+1. `./quick_install.sh`
+2. `cp config/api_credentials.env .env`
+3. Edit .env with your API keys
+4. `./run_simple_live_demo.sh`
 
-# Install dependencies  
-pip install -r requirements.txt
+## Key Components
+- Data Fusion Engine: Correlates price and sentiment
+- Alpha Detection: ML models for prediction
+- Risk Management: Kelly criterion position sizing
+- Portfolio Management: Real-time tracking
 
-# Run Atlas engine
-python atlas_run.py
+## Demos
+- `./run_data_fusion_demo.sh` - Core fusion engine
+- `./run_alpha_detection_demo.sh` - ML predictions  
+- `./run_real_data_demo.sh` - Live market data
 
-# Run benchmark
-python benchmark_run.py
-```
+## Requirements
+- Python 3.8-3.11
+- API keys for data sources (optional)
+- See requirements.txt for dependencies
 
-## Architecture
-- **Core Engine**: `src/core/atlas_engine.py` (all functionality)
-- **Benchmark**: `src/models/benchmark.py` (performance testing)
-- **Config**: `config/atlas_config.yaml` (settings)
+Compressed on Sun Jul 13 23:55:05 EDT 2025
 
-## Targets
-- ✅ Asset Discovery: ≥95%
-- ✅ Cross-Source Consistency: ≥85%  
-- ✅ Processing Speed: ≥1000 assets/sec
-- ✅ False Positive Rate: ≤5%
-
-**Total Size**: <50KB (vs 2MB+ uncompressed) | **Functionality**: 100% preserved
