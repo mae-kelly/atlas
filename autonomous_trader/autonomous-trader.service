@@ -1,0 +1,16 @@
+[Unit]
+Description=Autonomous Cryptocurrency Trading Bot
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/trader/autonomous_trader
+ExecStart=/usr/bin/docker-compose up
+ExecStop=/usr/bin/docker-compose down
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 [package]
-name = "crypto_trading"
-version = "4.0.0"
+name = "autonomous_trader"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
@@ -24,10 +24,16 @@ rust_decimal = { version = "1.35", features = ["serde"] }
 rust_decimal_macros = "1.35"
 log = "0.4"
 env_logger = "0.10"
+clap = { version = "4.0", features = ["derive"] }
+sled = "0.34"  # Persistent database
+hyper = { version = "0.14", features = ["full"] }
+warp = "0.3"   # Health check endpoint
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 
 [profile.release]
 opt-level = 3
-lto = "fat"
+lto = true
 codegen-units = 1
 panic = "abort"
 strip = true

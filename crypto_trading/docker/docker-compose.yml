@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  trading-bot:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      - OKX_API_KEY=${OKX_API_KEY}
+      - OKX_SECRET_KEY=${OKX_SECRET_KEY}
+      - OKX_PASSPHRASE=${OKX_PASSPHRASE}
+      - RUST_LOG=info
+    restart: unless-stopped
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+    networks:
+      - trading-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - trading-network
+    volumes:
+      - redis_data:/data
+
+networks:
+  trading-network:
+    driver: bridge
+
+volumes:
+  redis_data:

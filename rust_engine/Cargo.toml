@@ -1,0 +1,19 @@
+[package]
+name = "hft_engine"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
+anyhow = "1.0"
+dashmap = "5.5"
+uuid = { version = "1.0", features = ["v4"] }
+crossbeam = "0.8"
+rayon = "1.7"
+cc = "1.0"
+
+[build-dependencies]
+cc = "1.0"

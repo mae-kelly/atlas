@@ -1,37 +1,11 @@
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::io::{self, Write};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use dashmap::DashMap;
 use reqwest;
-use chrono::Utc;
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
-use base64::{Engine as _, engine::general_purpose};
-use rust_decimal::prelude::*;
-use uuid::Uuid;
-
-type HmacSha256 = Hmac<Sha256>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum TradingStrategy {
-    Momentum,
-    MeanReversion,
-    GridTrading,
-    Arbitrage,
-    Scalping,
-    BreakoutTrading,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum MarketCondition {
-    Trending,
-    Sideways,
-    Volatile,
-    LowVolume,
-}
+use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OkxTicker {
@@ -44,973 +18,565 @@ struct OkxTicker {
     bid_px: Option<String>,
     #[serde(rename = "vol24h")]
     vol_24h: Option<String>,
-    #[serde(rename = "volCcy24h")]
-    vol_ccy_24h: Option<String>,
     ts: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OkxResponse {
     code: String,
-    msg: String,
     data: Vec<OkxTicker>,
 }
 
 #[derive(Debug, Clone)]
-struct TechnicalIndicators {
-    sma_20: f64,
-    sma_50: f64,
-    ema_12: f64,
-    ema_26: f64,
-    rsi: f64,
-    macd: f64,
-    macd_signal: f64,
-    bollinger_upper: f64,
-    bollinger_lower: f64,
-    bollinger_middle: f64,
-    stoch_k: f64,
-    stoch_d: f64,
-    atr: f64,
-    support: f64,
-    resistance: f64,
-}
-
-#[derive(Debug, Clone)]
-struct MarketData {
-    prices: VecDeque<(u64, f64)>,
-    volumes: VecDeque<(u64, f64)>,
-    high_prices: VecDeque<f64>,
-    low_prices: VecDeque<f64>,
-    close_prices: VecDeque<f64>,
-    indicators: Option<TechnicalIndicators>,
-    market_condition: MarketCondition,
-    volatility: f64,
-    liquidity_score: f64,
-    trend_strength: f64,
-    momentum: f64,
+struct FastTickData {
+    symbol: String,
+    price: f64,
+    bid: f64,
+    ask: f64,
+    volume: f64,
+    last_price: f64,
+    price_velocity: f64,
+    spread: f64,
+    momentum_1s: f64,
+    momentum_3s: f64,
+    volume_velocity: f64,
+    tick_count: u64,
     last_update: u64,
 }
 
 #[derive(Debug, Clone)]
-struct Position {
+struct HFTPosition {
     id: String,
     symbol: String,
-    strategy: TradingStrategy,
+    side: String,
     entry_price: f64,
     current_price: f64,
-    quantity: f64,
-    leverage: f64,
-    side: String, // "buy" or "sell"
+    size: f64,
     entry_time: Instant,
-    stop_loss: f64,
-    take_profit: f64,
-    trailing_stop: Option<f64>,
-    fees_paid: f64,
-    unrealized_pnl: f64,
-    max_favorable: f64,
-    max_adverse: f64,
-    risk_score: f64,
+    target: f64,
+    stop: f64,
+    pnl: f64,
+    max_hold_ms: u64,
 }
 
 #[derive(Debug, Clone)]
-struct GridLevel {
-    price: f64,
-    quantity: f64,
-    is_buy: bool,
-    is_filled: bool,
-    order_id: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct GridStrategy {
+struct HFTTrade {
     symbol: String,
-    upper_price: f64,
-    lower_price: f64,
-    grid_levels: Vec<GridLevel>,
-    total_investment: f64,
-    current_profit: f64,
+    side: String,
+    entry_price: f64,
+    exit_price: f64,
+    size: f64,
+    pnl: f64,
+    hold_time_ms: u64,
+    strategy: String,
+    timestamp: u64,
 }
 
-#[derive(Debug, Clone)]
-struct ArbitrageOpportunity {
-    symbol: String,
-    buy_price: f64,
-    sell_price: f64,
-    profit_percentage: f64,
-    volume_available: f64,
-    expires_at: Instant,
-}
-
-#[derive(Debug, Clone)]
-struct RiskMetrics {
-    total_exposure: f64,
-    max_drawdown: f64,
-    sharpe_ratio: f64,
-    sortino_ratio: f64,
-    var_95: f64, // Value at Risk 95%
-    portfolio_beta: f64,
-    correlation_risk: f64,
-}
-
-#[derive(Debug, Clone)]
-struct TradingMetrics {
-    total_trades: u32,
-    winning_trades: u32,
-    losing_trades: u32,
-    total_pnl: f64,
-    win_rate: f64,
-    avg_win: f64,
-    avg_loss: f64,
-    profit_factor: f64,
-    max_consecutive_wins: u32,
-    max_consecutive_losses: u32,
-    largest_win: f64,
-    largest_loss: f64,
-    avg_hold_time: f64,
-    total_fees_paid: f64,
-    daily_pnl: f64,
-    weekly_pnl: f64,
-    monthly_pnl: f64,
-    roi: f64,
-    annualized_return: f64,
-}
-
-struct UltimateOkxBot {
-    // API credentials
-    api_key: String,
-    secret_key: String,
-    passphrase: String,
-    
-    // Market data
-    market_data: Arc<DashMap<String, MarketData>>,
-    
-    // Trading
-    positions: Arc<DashMap<String, Position>>,
-    grid_strategies: Arc<DashMap<String, GridStrategy>>,
-    arbitrage_opportunities: Arc<Mutex<Vec<ArbitrageOpportunity>>>,
-    
-    // Portfolio management
-    total_balance: Arc<RwLock<f64>>,
-    available_balance: Arc<RwLock<f64>>,
-    allocated_per_strategy: Arc<RwLock<HashMap<TradingStrategy, f64>>>,
-    
-    // Risk management
-    max_position_size: f64,
-    max_leverage: f64,
-    max_portfolio_risk: f64,
-    max_correlation: f64,
-    daily_loss_limit: f64,
-    
-    // Performance tracking
-    trading_metrics: Arc<RwLock<TradingMetrics>>,
-    risk_metrics: Arc<RwLock<RiskMetrics>>,
-    
-    // Configuration
-    strategies_enabled: HashMap<TradingStrategy, bool>,
-    min_profit_threshold: f64,
-    max_drawdown_threshold: f64,
-    
-    // HTTP client
+struct HighFrequencyTrader {
     client: reqwest::Client,
-    api_calls_count: Arc<RwLock<u32>>,
     
-    // Performance optimization
-    watchlist: Vec<String>, // Focus on most profitable pairs
-    blacklist: Vec<String>, // Avoid problematic pairs
+    // Market data for ALL pairs
+    all_tickers: Arc<DashMap<String, FastTickData>>,
+    price_buffers: Arc<DashMap<String, VecDeque<(u64, f64)>>>,
+    
+    // HFT positions and trades
+    positions: Arc<DashMap<String, HFTPosition>>,
+    completed_trades: Arc<RwLock<Vec<HFTTrade>>>,
+    
+    // Portfolio
+    balance: Arc<RwLock<f64>>,
+    total_pnl: Arc<RwLock<f64>>,
+    
+    // HFT settings
+    tick_interval_ms: u64,
+    max_positions: usize,
+    min_spread_bps: f64,
+    min_momentum_bps: f64,
+    max_hold_time_ms: u64,
+    
+    // Performance counters
+    total_ticks: Arc<RwLock<u64>>,
+    signals_generated: Arc<RwLock<u64>>,
+    trades_executed: Arc<RwLock<u64>>,
+    updates_per_second: Arc<RwLock<f64>>,
+    
+    last_display_time: Arc<RwLock<Instant>>,
 }
 
-impl UltimateOkxBot {
+impl HighFrequencyTrader {
     fn new() -> Self {
-        let mut strategies_enabled = HashMap::new();
-        strategies_enabled.insert(TradingStrategy::Momentum, true);
-        strategies_enabled.insert(TradingStrategy::MeanReversion, true);
-        strategies_enabled.insert(TradingStrategy::GridTrading, true);
-        strategies_enabled.insert(TradingStrategy::Arbitrage, true);
-        strategies_enabled.insert(TradingStrategy::Scalping, true);
-        strategies_enabled.insert(TradingStrategy::BreakoutTrading, true);
-
         Self {
-            api_key: String::new(),
-            secret_key: String::new(),
-            passphrase: String::new(),
-            market_data: Arc::new(DashMap::new()),
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_millis(500))
+                .build()
+                .unwrap(),
+            
+            all_tickers: Arc::new(DashMap::new()),
+            price_buffers: Arc::new(DashMap::new()),
             positions: Arc::new(DashMap::new()),
-            grid_strategies: Arc::new(DashMap::new()),
-            arbitrage_opportunities: Arc::new(Mutex::new(Vec::new())),
-            total_balance: Arc::new(RwLock::new(1000.0)),
-            available_balance: Arc::new(RwLock::new(1000.0)),
-            allocated_per_strategy: Arc::new(RwLock::new(HashMap::new())),
-            max_position_size: 50.0, // Increased from $10
-            max_leverage: 3.0, // Conservative leverage
-            max_portfolio_risk: 0.15, // 15% max portfolio risk
-            max_correlation: 0.7, // Max correlation between positions
-            daily_loss_limit: 100.0, // Max $100 loss per day
-            trading_metrics: Arc::new(RwLock::new(TradingMetrics {
-                total_trades: 0,
-                winning_trades: 0,
-                losing_trades: 0,
-                total_pnl: 0.0,
-                win_rate: 0.0,
-                avg_win: 0.0,
-                avg_loss: 0.0,
-                profit_factor: 0.0,
-                max_consecutive_wins: 0,
-                max_consecutive_losses: 0,
-                largest_win: 0.0,
-                largest_loss: 0.0,
-                avg_hold_time: 0.0,
-                total_fees_paid: 0.0,
-                daily_pnl: 0.0,
-                weekly_pnl: 0.0,
-                monthly_pnl: 0.0,
-                roi: 0.0,
-                annualized_return: 0.0,
-            })),
-            risk_metrics: Arc::new(RwLock::new(RiskMetrics {
-                total_exposure: 0.0,
-                max_drawdown: 0.0,
-                sharpe_ratio: 0.0,
-                sortino_ratio: 0.0,
-                var_95: 0.0,
-                portfolio_beta: 0.0,
-                correlation_risk: 0.0,
-            })),
-            strategies_enabled,
-            min_profit_threshold: 0.003, // 0.3% minimum profit
-            max_drawdown_threshold: 0.20, // 20% max drawdown
-            client: reqwest::Client::new(),
-            api_calls_count: Arc::new(RwLock::new(0)),
-            watchlist: vec![
-                "BTC-USDT".to_string(), "ETH-USDT".to_string(), "SOL-USDT".to_string(),
-                "ADA-USDT".to_string(), "DOT-USDT".to_string(), "LINK-USDT".to_string(),
-                "AVAX-USDT".to_string(), "MATIC-USDT".to_string(), "UNI-USDT".to_string(),
-                "ATOM-USDT".to_string(), "FTM-USDT".to_string(), "NEAR-USDT".to_string(),
-            ],
-            blacklist: Vec::new(),
+            completed_trades: Arc::new(RwLock::new(Vec::new())),
+            balance: Arc::new(RwLock::new(1000.0)),
+            total_pnl: Arc::new(RwLock::new(0.0)),
+            
+            // Aggressive HFT settings
+            tick_interval_ms: 50,    // 20 times per second
+            max_positions: 20,       // Up to 20 simultaneous positions
+            min_spread_bps: 2.0,     // 0.02% minimum spread
+            min_momentum_bps: 1.0,   // 0.01% minimum momentum
+            max_hold_time_ms: 5000,  // 5 second max hold time
+            
+            total_ticks: Arc::new(RwLock::new(0)),
+            signals_generated: Arc::new(RwLock::new(0)),
+            trades_executed: Arc::new(RwLock::new(0)),
+            updates_per_second: Arc::new(RwLock::new(0.0)),
+            last_display_time: Arc::new(RwLock::new(Instant::now())),
         }
     }
-
-    async fn setup_credentials(&mut self) -> anyhow::Result<()> {
-        println!("🚀 ULTIMATE OKX PROFIT-MAXIMIZING BOT v2.0");
-        println!("==========================================");
-        println!("💰 FEATURES:");
-        println!("   • 6 Trading Strategies (Momentum, Mean Reversion, Grid, Arbitrage, Scalping, Breakout)");
-        println!("   • Advanced Technical Analysis (20+ indicators)");
-        println!("   • Dynamic Leverage (1-3x based on confidence)");
-        println!("   • Professional Risk Management");
-        println!("   • Real-time Portfolio Optimization");
-        println!("   • Multi-timeframe Analysis");
-        println!();
-        println!("⚠️  RISK SETTINGS:");
-        println!("   • Max Position: $50 (5x larger than before)");
-        println!("   • Max Leverage: 3x");
-        println!("   • Max Portfolio Risk: 15%");
-        println!("   • Daily Loss Limit: $100");
-        println!();
-
-        print!("🔑 Enter OKX API Key: ");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        self.api_key = input.trim().to_string();
-
-        print!("🔐 Enter OKX Secret Key: ");
-        io::stdout().flush()?;
-        input.clear();
-        io::stdin().read_line(&mut input)?;
-        self.secret_key = input.trim().to_string();
-
-        print!("🔒 Enter OKX Passphrase: ");
-        io::stdout().flush()?;
-        input.clear();
-        io::stdin().read_line(&mut input)?;
-        self.passphrase = input.trim().to_string();
-
-        println!("🔍 Testing API connection...");
-        match self.test_api_connection().await {
-            Ok(_) => println!("✅ API authentication successful!"),
-            Err(e) => {
-                println!("⚠️  API test failed: {}", e);
-                println!("🔄 Continuing with simulation mode...");
-            }
-        }
-
-        println!("🚀 Ultimate trading bot activated!");
-        println!();
-        Ok(())
-    }
-
-    fn generate_signature(&self, timestamp: &str, method: &str, request_path: &str, body: &str) -> String {
-        let pre_hash = format!("{}{}{}{}", timestamp, method, request_path, body);
-        let secret_bytes = general_purpose::STANDARD.decode(&self.secret_key)
-            .unwrap_or_else(|_| self.secret_key.as_bytes().to_vec());
+    
+    async fn fetch_all_market_data(&self) -> Result<()> {
+        let fetch_start = Instant::now();
         
-        let mut mac = HmacSha256::new_from_slice(&secret_bytes).expect("HMAC can take key of any size");
-        mac.update(pre_hash.as_bytes());
-        let result = mac.finalize();
-        general_purpose::STANDARD.encode(result.into_bytes())
-    }
-
-    async fn test_api_connection(&self) -> anyhow::Result<()> {
-        let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
-        let method = "GET";
-        let request_path = "/api/v5/account/balance";
-        let body = "";
-        
-        let signature = self.generate_signature(&timestamp, method, request_path, body);
-        
-        let response = self.client
-            .get(&format!("https://www.okx.com{}", request_path))
-            .header("OK-ACCESS-KEY", &self.api_key)
-            .header("OK-ACCESS-SIGN", signature)
-            .header("OK-ACCESS-TIMESTAMP", timestamp)
-            .header("OK-ACCESS-PASSPHRASE", &self.passphrase)
-            .header("Content-Type", "application/json")
-            .send()
-            .await?;
-
-        if response.status().is_success() {
-            println!("✅ API authentication successful");
-        }
-        Ok(())
-    }
-
-    async fn fetch_market_data(&self) -> anyhow::Result<Vec<OkxTicker>> {
-        let mut api_count = self.api_calls_count.write().await;
-        *api_count += 1;
-        drop(api_count);
-
         let response = self.client
             .get("https://www.okx.com/api/v5/market/tickers?instType=SPOT")
-            .header("Content-Type", "application/json")
             .send()
             .await?;
-
+        
         if response.status().is_success() {
             let okx_response: OkxResponse = response.json().await?;
-            if okx_response.code == "0" {
-                Ok(okx_response.data)
-            } else {
-                Ok(vec![])
+            let fetch_time = fetch_start.elapsed();
+            
+            let process_start = Instant::now();
+            
+            // Process ALL tickers, not just watchlist
+            for ticker in okx_response.data {
+                // Only trade USDT pairs for liquidity
+                if ticker.inst_id.ends_with("-USDT") {
+                    self.process_ticker_ultra_fast(&ticker).await;
+                }
             }
-        } else {
-            Ok(vec![])
-        }
-    }
-
-    fn calculate_technical_indicators(&self, prices: &VecDeque<f64>) -> Option<TechnicalIndicators> {
-        if prices.len() < 50 {
-            return None;
-        }
-
-        let price_vec: Vec<f64> = prices.iter().cloned().collect();
-        
-        // Simple Moving Averages
-        let sma_20 = price_vec[price_vec.len()-20..].iter().sum::<f64>() / 20.0;
-        let sma_50 = price_vec[price_vec.len()-50..].iter().sum::<f64>() / 50.0;
-        
-        // Exponential Moving Averages
-        let mut ema_12 = price_vec[0];
-        let mut ema_26 = price_vec[0];
-        let alpha_12 = 2.0 / (12.0 + 1.0);
-        let alpha_26 = 2.0 / (26.0 + 1.0);
-        
-        for &price in &price_vec[1..] {
-            ema_12 = alpha_12 * price + (1.0 - alpha_12) * ema_12;
-            ema_26 = alpha_26 * price + (1.0 - alpha_26) * ema_26;
-        }
-        
-        // RSI
-        let mut gains = 0.0;
-        let mut losses = 0.0;
-        for i in 1..15.min(price_vec.len()) {
-            let change = price_vec[price_vec.len() - i] - price_vec[price_vec.len() - i - 1];
-            if change > 0.0 {
-                gains += change;
-            } else {
-                losses += change.abs();
+            
+            let process_time = process_start.elapsed();
+            let total_time = fetch_start.elapsed();
+            
+            // Update performance metrics
+            let mut ticks = self.total_ticks.write().await;
+            *ticks += 1;
+            
+            // Calculate updates per second
+            if total_time.as_millis() > 0 {
+                let updates_per_sec = 1000.0 / total_time.as_millis() as f64;
+                *self.updates_per_second.write().await = updates_per_sec;
+            }
+            
+            // Show performance for very fast updates
+            if *ticks % 20 == 0 {
+                println!("⚡ Tick #{} | Fetch: {}ms | Process: {}ms | Total: {}ms | {:.1} ticks/sec", 
+                         *ticks, fetch_time.as_millis(), process_time.as_millis(), 
+                         total_time.as_millis(), 1000.0 / total_time.as_millis() as f64);
             }
         }
-        let rs = if losses > 0.0 { gains / losses } else { 100.0 };
-        let rsi = 100.0 - (100.0 / (1.0 + rs));
-        
-        // MACD
-        let macd = ema_12 - ema_26;
-        let macd_signal = macd; // Simplified
-        
-        // Bollinger Bands
-        let mean = sma_20;
-        let variance = price_vec[price_vec.len()-20..].iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / 20.0;
-        let std_dev = variance.sqrt();
-        let bollinger_upper = mean + 2.0 * std_dev;
-        let bollinger_lower = mean - 2.0 * std_dev;
-        let bollinger_middle = mean;
-        
-        // Stochastic
-        let high_14 = price_vec[price_vec.len()-14..].iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-        let low_14 = price_vec[price_vec.len()-14..].iter().fold(f64::INFINITY, |a, &b| a.min(b));
-        let current_price = price_vec[price_vec.len()-1];
-        let stoch_k = if high_14 != low_14 {
-            ((current_price - low_14) / (high_14 - low_14)) * 100.0
-        } else {
-            50.0
-        };
-        let stoch_d = stoch_k; // Simplified
-        
-        // ATR (simplified)
-        let mut atr_sum = 0.0;
-        for i in 1..15.min(price_vec.len()) {
-            atr_sum += (price_vec[price_vec.len() - i] - price_vec[price_vec.len() - i - 1]).abs();
-        }
-        let atr = atr_sum / 14.0;
-        
-        // Support and Resistance (simplified)
-        let recent_prices = &price_vec[price_vec.len()-20..];
-        let support = recent_prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-        let resistance = recent_prices.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-
-        Some(TechnicalIndicators {
-            sma_20,
-            sma_50,
-            ema_12,
-            ema_26,
-            rsi,
-            macd,
-            macd_signal,
-            bollinger_upper,
-            bollinger_lower,
-            bollinger_middle,
-            stoch_k,
-            stoch_d,
-            atr,
-            support,
-            resistance,
-        })
-    }
-
-    fn determine_market_condition(&self, indicators: &TechnicalIndicators, volatility: f64) -> MarketCondition {
-        // Trend determination
-        let trend_strength = (indicators.sma_20 - indicators.sma_50).abs() / indicators.sma_50;
-        
-        if volatility > 0.05 {
-            MarketCondition::Volatile
-        } else if trend_strength > 0.02 {
-            MarketCondition::Trending
-        } else if volatility < 0.01 {
-            MarketCondition::LowVolume
-        } else {
-            MarketCondition::Sideways
-        }
-    }
-
-    async fn analyze_momentum_strategy(&self, _symbol: &str, market_data: &MarketData) -> Option<(f64, f64)> {
-        if let Some(indicators) = &market_data.indicators {
-            // Momentum signals
-            let rsi_signal = if indicators.rsi > 70.0 { -1.0 } else if indicators.rsi < 30.0 { 1.0 } else { 0.0 };
-            let macd_signal = if indicators.macd > indicators.macd_signal { 1.0 } else { -1.0 };
-            let trend_signal = if indicators.ema_12 > indicators.ema_26 { 1.0 } else { -1.0 };
-            
-            let combined_signal = (rsi_signal + macd_signal + trend_signal) / 3.0;
-            let confidence = market_data.trend_strength * market_data.liquidity_score;
-            
-            if combined_signal.abs() > 0.5 && confidence > 0.3 {
-                return Some((combined_signal, confidence));
-            }
-        }
-        None
-    }
-
-    async fn analyze_mean_reversion_strategy(&self, _symbol: &str, market_data: &MarketData) -> Option<(f64, f64)> {
-        if let Some(indicators) = &market_data.indicators {
-            let current_price = market_data.prices.back().unwrap().1;
-            
-            // Bollinger Bands mean reversion
-            let bb_position = if current_price > indicators.bollinger_upper {
-                -1.0 // Sell signal
-            } else if current_price < indicators.bollinger_lower {
-                1.0 // Buy signal
-            } else {
-                0.0
-            };
-            
-            // RSI mean reversion
-            let rsi_reversion = if indicators.rsi > 80.0 {
-                -1.0
-            } else if indicators.rsi < 20.0 {
-                1.0
-            } else {
-                0.0
-            };
-            
-            let combined_signal = (bb_position + rsi_reversion) / 2.0;
-            let confidence = (1.0 - market_data.trend_strength) * market_data.volatility;
-            
-            if combined_signal.abs() > 0.5 && confidence > 0.2 {
-                return Some((combined_signal, confidence));
-            }
-        }
-        None
-    }
-
-    async fn analyze_scalping_strategy(&self, _symbol: &str, market_data: &MarketData) -> Option<(f64, f64)> {
-        if market_data.prices.len() < 10 {
-            return None;
-        }
-        
-        // Quick momentum for scalping
-        let prices: Vec<f64> = market_data.prices.iter().map(|(_, p)| *p).collect();
-        let len = prices.len();
-        
-        if len < 10 {
-            return None;
-        }
-        
-        let short_momentum = (prices[len-1] - prices[len-5]) / prices[len-5];
-        let volume_spike = market_data.volumes.back().unwrap().1 > 
-            market_data.volumes.iter().map(|(_, v)| *v).sum::<f64>() / market_data.volumes.len() as f64 * 1.5;
-        
-        if short_momentum.abs() > 0.005 && volume_spike {
-            let signal = if short_momentum > 0.0 { 1.0 } else { -1.0 };
-            let confidence = short_momentum.abs() * 10.0;
-            return Some((signal, confidence.min(1.0)));
-        }
-        
-        None
-    }
-
-    async fn calculate_position_size(&self, strategy: TradingStrategy, confidence: f64, _symbol: &str) -> f64 {
-        let available = *self.available_balance.read().await;
-        let base_size = self.max_position_size.min(available * 0.1); // Max 10% per trade
-        
-        // Kelly Criterion approximation
-        let kelly_fraction = confidence * 0.2; // Conservative Kelly
-        let risk_adjusted_size = base_size * kelly_fraction;
-        
-        // Strategy-specific adjustments
-        let strategy_multiplier = match strategy {
-            TradingStrategy::Scalping => 0.5, // Smaller positions for scalping
-            TradingStrategy::GridTrading => 1.5, // Larger for grid
-            TradingStrategy::Arbitrage => 2.0, // Largest for arbitrage
-            _ => 1.0,
-        };
-        
-        (risk_adjusted_size * strategy_multiplier).min(self.max_position_size)
-    }
-
-    async fn calculate_leverage(&self, strategy: TradingStrategy, confidence: f64) -> f64 {
-        let base_leverage = match strategy {
-            TradingStrategy::Arbitrage => 2.0, // Safe arbitrage
-            TradingStrategy::Scalping => 2.5, // Quick trades
-            TradingStrategy::Momentum => 1.8,
-            TradingStrategy::BreakoutTrading => 2.2,
-            _ => 1.5,
-        };
-        
-        // Adjust based on confidence
-        let confidence_multiplier = 0.5 + confidence * 1.5; // 0.5x to 2x
-        (base_leverage * confidence_multiplier).min(self.max_leverage)
-    }
-
-    async fn get_sentiment(&self, symbol: &str) -> f64 {
-        match tokio::process::Command::new("python3")
-            .arg("ml_analysis/sentiment.py")
-            .arg(symbol)
-            .output()
-            .await 
-        {
-            Ok(output) => {
-                let score_str = String::from_utf8_lossy(&output.stdout);
-                score_str.trim().parse().unwrap_or(0.5)
-            }
-            Err(_) => 0.5
-        }
-    }
-
-    async fn execute_trade(&self, symbol: String, signal: f64, confidence: f64, strategy: TradingStrategy) -> anyhow::Result<()> {
-        let market_data = self.market_data.get(&symbol).unwrap();
-        let current_price = market_data.prices.back().unwrap().1;
-        
-        let position_size = self.calculate_position_size(strategy, confidence, &symbol).await;
-        let leverage = self.calculate_leverage(strategy, confidence).await;
-        let side = if signal > 0.0 { "buy" } else { "sell" };
-        
-        // Check if we have enough balance
-        let mut available = self.available_balance.write().await;
-        let required_margin = position_size / leverage;
-        
-        if *available < required_margin {
-            return Ok(()); // Not enough balance
-        }
-        
-        *available -= required_margin;
-        drop(available);
-        
-        // Calculate stop loss and take profit
-        let atr = market_data.indicators.as_ref().map(|i| i.atr).unwrap_or(current_price * 0.02);
-        let stop_loss = if side == "buy" {
-            current_price - (atr * 2.0)
-        } else {
-            current_price + (atr * 2.0)
-        };
-        
-        let take_profit = if side == "buy" {
-            current_price + (atr * 3.0) // 1.5:1 risk/reward
-        } else {
-            current_price - (atr * 3.0)
-        };
-        
-        // Create position
-        let position = Position {
-            id: Uuid::new_v4().to_string(),
-            symbol: symbol.clone(),
-            strategy,
-            entry_price: current_price,
-            current_price,
-            quantity: position_size / current_price,
-            leverage,
-            side: side.to_string(),
-            entry_time: Instant::now(),
-            stop_loss,
-            take_profit,
-            trailing_stop: None,
-            fees_paid: position_size * 0.001, // 0.1% fee
-            unrealized_pnl: 0.0,
-            max_favorable: 0.0,
-            max_adverse: 0.0,
-            risk_score: 1.0 - confidence,
-        };
-        
-        self.positions.insert(position.id.clone(), position.clone());
-        
-        println!("🚀 TRADE EXECUTED: {} {} @ ${:.6} | Strategy: {:?} | Size: ${:.2} | Leverage: {:.1}x | Confidence: {:.2}", 
-                 side.to_uppercase(), symbol, current_price, strategy, position_size, leverage, confidence);
-        
-        // Update metrics
-        let mut metrics = self.trading_metrics.write().await;
-        metrics.total_trades += 1;
         
         Ok(())
     }
-
-    async fn update_positions(&self) {
+    
+    async fn process_ticker_ultra_fast(&self, ticker: &OkxTicker) {
+        let price = ticker.last.parse::<f64>().unwrap_or(0.0);
+        let bid = ticker.bid_px.as_ref().and_then(|b| b.parse().ok()).unwrap_or(price);
+        let ask = ticker.ask_px.as_ref().and_then(|a| a.parse().ok()).unwrap_or(price);
+        let volume = ticker.vol_24h.as_ref().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+        
+        if price <= 0.0 || bid <= 0.0 || ask <= 0.0 {
+            return;
+        }
+        
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+        let spread = (ask - bid) / bid * 10000.0; // basis points
+        
+        // Get or create price buffer
+        let mut price_buffer = self.price_buffers.entry(ticker.inst_id.clone()).or_insert_with(|| VecDeque::new());
+        price_buffer.push_back((timestamp, price));
+        if price_buffer.len() > 100 {
+            price_buffer.pop_front();
+        }
+        
+        // Calculate velocities and momentum
+        let (price_velocity, momentum_1s, momentum_3s, volume_velocity) = if let Some(existing) = self.all_tickers.get(&ticker.inst_id) {
+            let time_diff = (timestamp - existing.last_update) as f64 / 1_000_000_000.0; // nanoseconds to seconds
+            
+            let price_velocity = if time_diff > 0.0 && existing.price > 0.0 {
+                ((price - existing.price) / existing.price) / time_diff * 10000.0 // basis points per second
+            } else {
+                existing.price_velocity * 0.95 // Decay
+            };
+            
+            let volume_velocity = if time_diff > 0.0 && existing.volume > 0.0 {
+                ((volume - existing.volume) / existing.volume) / time_diff * 100.0 // % per second
+            } else {
+                existing.volume_velocity * 0.9
+            };
+            
+            // Calculate short-term momentum
+            let momentum_1s = self.calculate_momentum(&price_buffer, 1_000_000_000); // 1 second in nanoseconds
+            let momentum_3s = self.calculate_momentum(&price_buffer, 3_000_000_000); // 3 seconds in nanoseconds
+            
+            (price_velocity, momentum_1s, momentum_3s, volume_velocity)
+        } else {
+            (0.0, 0.0, 0.0, 0.0)
+        };
+        
+        let tick_data = FastTickData {
+            symbol: ticker.inst_id.clone(),
+            price,
+            bid,
+            ask,
+            volume,
+            last_price: self.all_tickers.get(&ticker.inst_id).map(|t| t.price).unwrap_or(price),
+            price_velocity,
+            spread,
+            momentum_1s,
+            momentum_3s,
+            volume_velocity,
+            tick_count: self.all_tickers.get(&ticker.inst_id).map(|t| t.tick_count + 1).unwrap_or(1),
+            last_update: timestamp,
+        };
+        
+        self.all_tickers.insert(ticker.inst_id.clone(), tick_data);
+    }
+    
+    fn calculate_momentum(&self, buffer: &VecDeque<(u64, f64)>, nanoseconds_ago: u64) -> f64 {
+        if buffer.len() < 2 {
+            return 0.0;
+        }
+        
+        let current_time = buffer.back().unwrap().0;
+        let target_time = current_time.saturating_sub(nanoseconds_ago);
+        let current_price = buffer.back().unwrap().1;
+        
+        // Find price closest to target time
+        let past_price = buffer.iter()
+            .rev()
+            .find(|(time, _)| *time <= target_time)
+            .map(|(_, price)| *price)
+            .unwrap_or(current_price);
+        
+        if past_price > 0.0 {
+            (current_price - past_price) / past_price * 10000.0 // basis points
+        } else {
+            0.0
+        }
+    }
+    
+    async fn scan_hft_opportunities(&self) {
+        let mut signals_count = 0;
+        let current_positions = self.positions.len();
+        
+        if current_positions >= self.max_positions {
+            return;
+        }
+        
+        for ticker_ref in self.all_tickers.iter() {
+            let ticker = ticker_ref.value();
+            
+            // Skip if already have position in this symbol
+            if self.positions.iter().any(|p| p.value().symbol == ticker.symbol) {
+                continue;
+            }
+            
+            let mut signal_strength = 0.0;
+            let mut strategy = "NONE";
+            let mut side = "NONE";
+            
+            // Ultra-fast momentum strategy
+            if ticker.momentum_1s.abs() > self.min_momentum_bps && ticker.price_velocity.abs() > 0.5 {
+                signal_strength = (ticker.momentum_1s.abs() / 10.0).min(1.0);
+                strategy = "MOMENTUM";
+                side = if ticker.momentum_1s > 0.0 { "BUY" } else { "SELL" };
+            }
+            
+            // Spread scalping strategy
+            if ticker.spread > self.min_spread_bps && ticker.spread < 20.0 && ticker.volume > 100000.0 {
+                signal_strength = (ticker.spread / 20.0).min(1.0);
+                strategy = "SCALP";
+                side = "BUY"; // Always buy mid-spread
+            }
+            
+            // Volume velocity strategy
+            if ticker.volume_velocity.abs() > 5.0 && ticker.momentum_1s.abs() > 2.0 {
+                signal_strength = (ticker.volume_velocity.abs() / 20.0).min(1.0);
+                strategy = "VOLUME";
+                side = if ticker.momentum_1s > 0.0 { "BUY" } else { "SELL" };
+            }
+            
+            // Mean reversion strategy
+            if ticker.momentum_3s.abs() > 15.0 && ticker.momentum_1s.abs() < 5.0 {
+                signal_strength = (ticker.momentum_3s.abs() / 30.0).min(1.0);
+                strategy = "REVERSION";
+                side = if ticker.momentum_3s > 0.0 { "SELL" } else { "BUY" };
+            }
+            
+            // Execute if signal is strong enough
+            if signal_strength > 0.6 && strategy != "NONE" {
+                self.execute_hft_trade(&ticker.symbol, side, ticker.price, ticker.bid, ticker.ask, signal_strength, strategy).await;
+                signals_count += 1;
+                
+                // Limit signals per cycle to avoid overtrading
+                if signals_count >= 5 {
+                    break;
+                }
+            }
+        }
+        
+        if signals_count > 0 {
+            let mut total_signals = self.signals_generated.write().await;
+            *total_signals += signals_count;
+        }
+    }
+    
+    async fn execute_hft_trade(&self, symbol: &str, side: &str, price: f64, bid: f64, ask: f64, confidence: f64, strategy: &str) {
+        let balance = *self.balance.read().await;
+        let base_size = (balance * 0.02).min(50.0).max(5.0); // 2% of balance, $5-$50
+        let position_size = base_size * confidence;
+        
+        // Calculate entry price with realistic slippage
+        let entry_price = match side {
+            "BUY" => ask + (ask * 0.0001), // Buy at ask + small slippage
+            "SELL" => bid - (bid * 0.0001), // Sell at bid - small slippage
+            _ => price,
+        };
+        
+        // Tight profit targets for HFT
+        let target = match side {
+            "BUY" => entry_price * 1.002,  // 0.2% profit target
+            "SELL" => entry_price * 0.998, // 0.2% profit target
+            _ => entry_price,
+        };
+        
+        let stop = match side {
+            "BUY" => entry_price * 0.999,   // 0.1% stop loss
+            "SELL" => entry_price * 1.001,  // 0.1% stop loss
+            _ => entry_price,
+        };
+        
+        let position = HFTPosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            symbol: symbol.to_string(),
+            side: side.to_string(),
+            entry_price,
+            current_price: entry_price,
+            size: position_size,
+            entry_time: Instant::now(),
+            target,
+            stop,
+            pnl: -position_size * 0.001, // Include fees
+            max_hold_ms: self.max_hold_time_ms,
+        };
+        
+        self.positions.insert(position.id.clone(), position);
+        
+        let mut trades_executed = self.trades_executed.write().await;
+        *trades_executed += 1;
+        
+        println!("⚡ HFT: {} {} {} @ ${:.6} | Size: ${:.2} | {} | Conf: {:.0}%", 
+                 strategy, side, symbol, entry_price, position_size, 
+                 format!("#{}", *trades_executed), confidence * 100.0);
+    }
+    
+    async fn update_hft_positions(&self) {
         let mut positions_to_close = Vec::new();
         
-        for position_ref in self.positions.iter() {
-            let position_id = position_ref.key().clone();
-            let mut position = position_ref.value().clone();
+        for pos_ref in self.positions.iter() {
+            let pos_id = pos_ref.key().clone();
+            let mut position = pos_ref.value().clone();
             
-            if let Some(market_data) = self.market_data.get(&position.symbol) {
-                let current_price = market_data.prices.back().unwrap().1;
-                position.current_price = current_price;
-                
-                // Calculate P&L
-                let price_diff = if position.side == "buy" {
-                    current_price - position.entry_price
-                } else {
-                    position.entry_price - current_price
+            if let Some(ticker) = self.all_tickers.get(&position.symbol) {
+                // Use real-time bid/ask for exit pricing
+                position.current_price = match position.side.as_str() {
+                    "BUY" => ticker.bid,  // Exit buy at bid
+                    "SELL" => ticker.ask, // Exit sell at ask
+                    _ => ticker.price,
                 };
                 
-                position.unrealized_pnl = price_diff * position.quantity * position.leverage - position.fees_paid;
-                
-                // Update max favorable/adverse
-                if position.unrealized_pnl > position.max_favorable {
-                    position.max_favorable = position.unrealized_pnl;
-                }
-                if position.unrealized_pnl < position.max_adverse {
-                    position.max_adverse = position.unrealized_pnl;
-                }
+                // Calculate P&L with realistic execution
+                let price_diff = match position.side.as_str() {
+                    "BUY" => position.current_price - position.entry_price,
+                    "SELL" => position.entry_price - position.current_price,
+                    _ => 0.0,
+                };
+                position.pnl = (price_diff / position.entry_price) * position.size - (position.size * 0.001);
                 
                 // Check exit conditions
-                let should_close = if position.side == "buy" {
-                    current_price <= position.stop_loss || current_price >= position.take_profit
+                let hit_target = match position.side.as_str() {
+                    "BUY" => position.current_price >= position.target,
+                    "SELL" => position.current_price <= position.target,
+                    _ => false,
+                };
+                
+                let hit_stop = match position.side.as_str() {
+                    "BUY" => position.current_price <= position.stop,
+                    "SELL" => position.current_price >= position.stop,
+                    _ => false,
+                };
+                
+                let time_exit = position.entry_time.elapsed().as_millis() as u64 > position.max_hold_ms;
+                
+                if hit_target || hit_stop || time_exit {
+                    positions_to_close.push((pos_id.clone(), position.clone()));
                 } else {
-                    current_price >= position.stop_loss || current_price <= position.take_profit
-                };
-                
-                // Time-based exits for scalping
-                let time_exit = match position.strategy {
-                    TradingStrategy::Scalping => position.entry_time.elapsed() > Duration::from_secs(60),
-                    TradingStrategy::Arbitrage => position.entry_time.elapsed() > Duration::from_secs(30),
-                    _ => position.entry_time.elapsed() > Duration::from_secs(300),
-                };
-                
-                if should_close || time_exit {
-                    positions_to_close.push(position_id.clone());
+                    // Update position
+                    drop(pos_ref);
+                    self.positions.insert(pos_id, position);
                 }
-                
-                // Update position in map
-                drop(position_ref);
-                self.positions.insert(position_id, position);
             }
         }
         
         // Close positions
-        for position_id in positions_to_close {
-            self.close_position(position_id).await;
-        }
-    }
-
-    async fn close_position(&self, position_id: String) {
-        if let Some((_, position)) = self.positions.remove(&position_id) {
-            let exit_reason = if position.current_price <= position.stop_loss || position.current_price >= position.stop_loss {
-                if position.unrealized_pnl > 0.0 { "Take Profit" } else { "Stop Loss" }
-            } else {
-                "Time Exit"
+        for (pos_id, position) in positions_to_close {
+            self.positions.remove(&pos_id);
+            
+            let hold_time = position.entry_time.elapsed().as_millis() as u64;
+            let exit_reason = if position.pnl > 0.0 { "TARGET" } else if hold_time > position.max_hold_ms { "TIME" } else { "STOP" };
+            
+            // Update balance
+            let mut balance = self.balance.write().await;
+            *balance += position.pnl;
+            
+            let mut total_pnl = self.total_pnl.write().await;
+            *total_pnl += position.pnl;
+            
+            // Record trade
+            let trade = HFTTrade {
+                symbol: position.symbol.clone(),
+                side: position.side.clone(),
+                entry_price: position.entry_price,
+                exit_price: position.current_price,
+                size: position.size,
+                pnl: position.pnl,
+                hold_time_ms: hold_time,
+                strategy: exit_reason.to_string(),
+                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
             };
             
-            // Return margin to available balance
-            let margin_returned = (position.quantity * position.entry_price) / position.leverage;
-            let mut available = self.available_balance.write().await;
-            *available += margin_returned + position.unrealized_pnl;
-            drop(available);
-            
-            let hold_time = position.entry_time.elapsed().as_secs_f64();
-            let pnl_percentage = (position.unrealized_pnl / (position.quantity * position.entry_price)) * 100.0;
-            
-            println!("📉 POSITION CLOSED: {} {} | {} | P&L: ${:.4} ({:.2}%) | Hold: {:.1}s | Strategy: {:?}", 
-                     position.side.to_uppercase(), position.symbol, exit_reason, 
-                     position.unrealized_pnl, pnl_percentage, hold_time, position.strategy);
-            
-            // Update metrics
-            let mut metrics = self.trading_metrics.write().await;
-            if position.unrealized_pnl > 0.0 {
-                metrics.winning_trades += 1;
-                metrics.avg_win = (metrics.avg_win * (metrics.winning_trades - 1) as f64 + position.unrealized_pnl) / metrics.winning_trades as f64;
-                if position.unrealized_pnl > metrics.largest_win {
-                    metrics.largest_win = position.unrealized_pnl;
-                }
-            } else {
-                metrics.losing_trades += 1;
-                metrics.avg_loss = (metrics.avg_loss * (metrics.losing_trades - 1) as f64 + position.unrealized_pnl.abs()) / metrics.losing_trades as f64;
-                if position.unrealized_pnl < metrics.largest_loss {
-                    metrics.largest_loss = position.unrealized_pnl;
-                }
+            let mut completed_trades = self.completed_trades.write().await;
+            completed_trades.push(trade);
+            if completed_trades.len() > 500 {
+                completed_trades.remove(0);
             }
             
-            metrics.total_pnl += position.unrealized_pnl;
-            metrics.total_fees_paid += position.fees_paid;
-            metrics.win_rate = (metrics.winning_trades as f64 / metrics.total_trades as f64) * 100.0;
-            metrics.profit_factor = if metrics.avg_loss > 0.0 { metrics.avg_win / metrics.avg_loss } else { 0.0 };
-            
-            let total_balance = *self.total_balance.read().await;
-            metrics.roi = (metrics.total_pnl / total_balance) * 100.0;
+            println!("🔚 CLOSE: {} {} | P&L: ${:.3} | {} | {}ms", 
+                     position.symbol, position.side, position.pnl, exit_reason, hold_time);
         }
     }
-
-    async fn update_market_data(&self, tickers: Vec<OkxTicker>) {
-        for ticker in tickers {
-            // Focus on watchlist for performance
-            if !self.watchlist.contains(&ticker.inst_id) && !ticker.inst_id.contains("USDT") {
-                continue;
-            }
-            
-            let price: f64 = ticker.last.parse().unwrap_or(0.0);
-            let volume: f64 = ticker.vol_24h.as_ref().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-            
-            if price <= 0.0 {
-                continue;
-            }
-            
-            let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
-            
-            let mut market_data = self.market_data.entry(ticker.inst_id.clone()).or_insert_with(|| MarketData {
-                prices: VecDeque::with_capacity(200),
-                volumes: VecDeque::with_capacity(200),
-                high_prices: VecDeque::with_capacity(200),
-                low_prices: VecDeque::with_capacity(200),
-                close_prices: VecDeque::with_capacity(200),
-                indicators: None,
-                market_condition: MarketCondition::Sideways,
-                volatility: 0.0,
-                liquidity_score: 0.0,
-                trend_strength: 0.0,
-                momentum: 0.0,
-                last_update: timestamp,
-            });
-            
-            // Update price data
-            market_data.prices.push_back((timestamp, price));
-            market_data.volumes.push_back((timestamp, volume));
-            market_data.close_prices.push_back(price);
-            market_data.high_prices.push_back(price);
-            market_data.low_prices.push_back(price);
-            
-            // Keep only recent data
-            if market_data.prices.len() > 200 {
-                market_data.prices.pop_front();
-                market_data.volumes.pop_front();
-                market_data.close_prices.pop_front();
-                market_data.high_prices.pop_front();
-                market_data.low_prices.pop_front();
-            }
-            
-            // Calculate indicators
-            market_data.indicators = self.calculate_technical_indicators(&market_data.close_prices);
-            
-            // Calculate metrics
-            if market_data.close_prices.len() > 20 {
-                let prices: Vec<f64> = market_data.close_prices.iter().cloned().collect();
-                let mean = prices.iter().sum::<f64>() / prices.len() as f64;
-                let variance = prices.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / prices.len() as f64;
-                market_data.volatility = variance.sqrt() / mean;
-                
-                market_data.liquidity_score = (volume / 1000000.0).min(1.0);
-                market_data.momentum = (price - prices[0]) / prices[0];
-                market_data.trend_strength = market_data.momentum.abs();
-                
-                if let Some(indicators) = &market_data.indicators {
-                    market_data.market_condition = self.determine_market_condition(indicators, market_data.volatility);
-                }
-            }
-            
-            market_data.last_update = timestamp;
+    
+    async fn display_hft_dashboard(&self) {
+        let now = Instant::now();
+        let mut last_display = self.last_display_time.write().await;
+        
+        // Only update display every 2 seconds to avoid spam
+        if now.duration_since(*last_display).as_millis() < 2000 {
+            return;
         }
-    }
-
-    async fn scan_for_opportunities(&self) {
-        for market_entry in self.market_data.iter() {
-            let symbol = market_entry.key();
-            let market_data = market_entry.value();
-            
-            // Skip if not enough data
-            if market_data.prices.len() < 50 {
-                continue;
-            }
-            
-            // Skip blacklisted symbols
-            if self.blacklist.contains(symbol) {
-                continue;
-            }
-            
-            // Analyze each strategy
-            if self.strategies_enabled[&TradingStrategy::Momentum] {
-                if let Some((signal, confidence)) = self.analyze_momentum_strategy(symbol, &market_data).await {
-                    let _ = self.execute_trade(symbol.clone(), signal, confidence, TradingStrategy::Momentum).await;
-                }
-            }
-            
-            if self.strategies_enabled[&TradingStrategy::MeanReversion] {
-                if let Some((signal, confidence)) = self.analyze_mean_reversion_strategy(symbol, &market_data).await {
-                    let _ = self.execute_trade(symbol.clone(), signal, confidence, TradingStrategy::MeanReversion).await;
-                }
-            }
-            
-            if self.strategies_enabled[&TradingStrategy::Scalping] {
-                if let Some((signal, confidence)) = self.analyze_scalping_strategy(symbol, &market_data).await {
-                    let _ = self.execute_trade(symbol.clone(), signal, confidence, TradingStrategy::Scalping).await;
-                }
-            }
-        }
-    }
-
-    async fn display_comprehensive_dashboard(&self) {
-        let api_count = *self.api_calls_count.read().await;
-        let metrics = self.trading_metrics.read().await;
-        let total_balance = *self.total_balance.read().await;
-        let available = *self.available_balance.read().await;
+        *last_display = now;
+        drop(last_display);
+        
+        print!("\x1B[2J\x1B[1;1H"); // Clear screen
+        
+        let balance = *self.balance.read().await;
+        let total_pnl = *self.total_pnl.read().await;
+        let total_ticks = *self.total_ticks.read().await;
+        let signals_generated = *self.signals_generated.read().await;
+        let trades_executed = *self.trades_executed.read().await;
+        let updates_per_second = *self.updates_per_second.read().await;
         let active_positions = self.positions.len();
+        let total_symbols = self.all_tickers.len();
         
-        let total_unrealized = self.positions.iter()
-            .map(|p| p.value().unrealized_pnl)
-            .sum::<f64>();
+        println!("⚡ HIGH-FREQUENCY TRADING SYSTEM - LIVE");
+        println!("=====================================");
+        println!("📊 MARKET: {} symbols | {:.1} ticks/sec | Tick #{}", 
+                 total_symbols, updates_per_second, total_ticks);
+        println!("💰 PORTFOLIO: ${:.2} | P&L: ${:.3} | ROI: {:.2}%", 
+                 balance, total_pnl, total_pnl / 1000.0 * 100.0);
+        println!("⚡ ACTIVITY: {} signals | {} trades | {} active", 
+                 signals_generated, trades_executed, active_positions);
+        println!();
         
-        let current_value = available + total_unrealized;
-        let portfolio_pnl = current_value - total_balance;
+        // Show most active symbols by tick count
+        println!("🔥 MOST ACTIVE SYMBOLS:");
+        let mut active_symbols: Vec<_> = self.all_tickers.iter().collect();
+        active_symbols.sort_by(|a, b| b.value().tick_count.cmp(&a.value().tick_count));
         
-        println!("📊 ULTIMATE TRADING DASHBOARD v2.0");
-        println!("==================================");
-        println!("💰 Portfolio: ${:.2} | Available: ${:.2} | Unrealized: ${:.2}", 
-                 current_value, available, total_unrealized);
-        println!("📈 Total P&L: ${:.4} | Daily: ${:.4} | ROI: {:.2}%", 
-                 portfolio_pnl, metrics.daily_pnl, metrics.roi);
-        println!("🎯 Trades: {} | Win Rate: {:.1}% | Profit Factor: {:.2}", 
-                 metrics.total_trades, metrics.win_rate, metrics.profit_factor);
-        println!("📊 Active Positions: {} | API Calls: {}", active_positions, api_count);
-        println!("🏆 Best: ${:.4} | 📉 Worst: ${:.4} | Fees: ${:.4}", 
-                 metrics.largest_win, metrics.largest_loss, metrics.total_fees_paid);
+        for (i, symbol_ref) in active_symbols.iter().take(10).enumerate() {
+            let data = symbol_ref.value();
+            let momentum_emoji = if data.momentum_1s.abs() > 5.0 { "🚀" } else if data.momentum_1s.abs() > 2.0 { "📈" } else { "📊" };
+            println!("   {}{} {} | ${:.6} | M1s: {:.1}bp | Spread: {:.1}bp | V: {:.1}bp/s | #{}", 
+                     i + 1, momentum_emoji, data.symbol, data.price, 
+                     data.momentum_1s, data.spread, data.price_velocity, data.tick_count);
+        }
+        
+        println!();
         
         // Show active positions
-        println!("🔄 Active Positions:");
-        for position in self.positions.iter() {
-            let pos = position.value();
-            let pnl_pct = (pos.unrealized_pnl / (pos.quantity * pos.entry_price)) * 100.0;
-            println!("   {} {} {} @ ${:.6} | P&L: ${:.4} ({:.2}%) | {:?}", 
-                     pos.side.to_uppercase(), pos.symbol, pos.leverage, 
-                     pos.current_price, pos.unrealized_pnl, pnl_pct, pos.strategy);
+        if active_positions > 0 {
+            println!("🔄 ACTIVE HFT POSITIONS:");
+            for pos in self.positions.iter() {
+                let p = pos.value();
+                let age_ms = p.entry_time.elapsed().as_millis() as u64;
+                let pnl_emoji = if p.pnl > 0.0 { "💰" } else { "📉" };
+                println!("   {} {} {} @ ${:.6} | P&L: ${:.3} | {}ms | Target: ${:.6}", 
+                         pnl_emoji, p.side, p.symbol, p.entry_price, p.pnl, age_ms, p.target);
+            }
+            println!();
         }
         
-        // Show top movers
-        let mut movers: Vec<_> = self.market_data.iter()
-            .filter(|entry| entry.value().momentum.abs() > 0.01)
-            .map(|entry| (entry.key().clone(), entry.value().momentum, entry.value().volatility))
-            .collect();
-        movers.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap_or(std::cmp::Ordering::Equal));
-        
-        println!("🚀 Top Movers:");
-        for (symbol, momentum, volatility) in movers.iter().take(5) {
-            println!("   {} = {:.2}% (vol: {:.3})", symbol, momentum * 100.0, volatility);
+        // Show recent trades
+        let completed_trades = self.completed_trades.read().await;
+        if !completed_trades.is_empty() {
+            println!("📋 RECENT HFT TRADES:");
+            for trade in completed_trades.iter().rev().take(5) {
+                let trade_emoji = if trade.pnl > 0.0 { "✅" } else { "❌" };
+                println!("   {} {} {} | P&L: ${:.3} | {}ms hold", 
+                         trade_emoji, trade.side, trade.symbol, trade.pnl, trade.hold_time_ms);
+            }
         }
         
         println!();
+        println!("⚡ HFT ENGINE RUNNING - NEXT TICK IN {}ms", self.tick_interval_ms);
     }
-
-    async fn run(&self) -> anyhow::Result<()> {
-        println!("🚀 Starting Ultimate OKX Trading Bot...");
-        println!("📡 Multi-strategy analysis active");
-        println!("💰 Advanced risk management enabled");
-        println!("⚡ High-frequency trading mode");
+    
+    async fn run_hft_engine(&self) -> Result<()> {
+        println!("⚡ STARTING HIGH-FREQUENCY TRADING ENGINE");
+        println!("========================================");
+        println!("• Tick Interval: {}ms ({}x per second)", self.tick_interval_ms, 1000 / self.tick_interval_ms);
+        println!("• Max Positions: {}", self.max_positions);
+        println!("• Min Spread: {:.1} basis points", self.min_spread_bps);
+        println!("• Max Hold Time: {}ms", self.max_hold_time_ms);
+        println!("• Monitoring: ALL OKX USDT pairs");
         println!();
-
-        let mut update_count = 0;
+        
+        let mut tick_interval = tokio::time::interval(Duration::from_millis(self.tick_interval_ms));
+        let mut display_interval = tokio::time::interval(Duration::from_millis(2000));
         
         loop {
-            // Fetch market data
-            match self.fetch_market_data().await {
-                Ok(tickers) => {
-                    if !tickers.is_empty() {
-                        update_count += 1;
-                        
-                        // Update market data
-                        self.update_market_data(tickers).await;
-                        
-                        // Update existing positions
-                        self.update_positions().await;
-                        
-                        // Scan for new opportunities (every 3rd update to avoid overtrading)
-                        if update_count % 3 == 0 {
-                            self.scan_for_opportunities().await;
-                        }
-                        
-                        // Display dashboard every 5 updates
-                        if update_count % 5 == 0 {
-                            self.display_comprehensive_dashboard().await;
-                        }
-                        
-                        // Quick status update
-                        if update_count % 2 == 0 {
-                            let positions = self.positions.len();
-                            let total_pnl = self.positions.iter().map(|p| p.value().unrealized_pnl).sum::<f64>();
-                            println!("📊 Update #{} | Active: {} | Unrealized P&L: ${:.4}", 
-                                     update_count, positions, total_pnl);
-                        }
+            tokio::select! {
+                _ = tick_interval.tick() => {
+                    // Ultra-fast market data and trading cycle
+                    if let Err(e) = self.fetch_all_market_data().await {
+                        eprintln!("Market data error: {}", e);
                     }
+                    
+                    self.scan_hft_opportunities().await;
+                    self.update_hft_positions().await;
                 }
-                Err(e) => {
-                    println!("❌ API Error: {}", e);
+                
+                _ = display_interval.tick() => {
+                    self.display_hft_dashboard().await;
                 }
             }
-            
-            // Fast update cycle (2 seconds for active trading)
-            tokio::time::sleep(Duration::from_secs(2)).await;
         }
     }
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let mut bot = UltimateOkxBot::new();
-    bot.setup_credentials().await?;
-    bot.run().await
+async fn main() -> Result<()> {
+    let trader = HighFrequencyTrader::new();
+    trader.run_hft_engine().await
 }
